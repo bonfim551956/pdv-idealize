@@ -12,3 +12,21 @@
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
 }
+
+/* ---------- Ordem de serviço impressa (A4) ---------- */
+.folha-os {
+  width: 210mm;
+  min-height: 297mm;
+  padding: 12mm;
+  box-sizing: border-box;
+}
+@media print {
+  @page { size: A4; margin: 0; }
+  html, body { background: #FAFAFA !important; }
+  .no-print { display: none !important; }
+  .folha-os { break-after: page; page-break-after: always; }
+  .folha-os:last-child { break-after: auto; page-break-after: auto; }
+}
+@media screen and (max-width: 840px) {
+  .folha-os { width: 100%; min-height: auto; padding: 16px; }
+}

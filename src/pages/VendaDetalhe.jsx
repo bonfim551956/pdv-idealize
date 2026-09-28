@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
-import { ArrowLeft, Banknote, QrCode, Wallet, CreditCard, FileText, Receipt, Landmark, Coins, Undo2 } from 'lucide-react'
+import { Link, useParams, useNavigate } from 'react-router-dom'
+import { ArrowLeft, Banknote, QrCode, Wallet, CreditCard, FileText, Receipt, Landmark, Coins, Undo2, Printer } from 'lucide-react'
 import { supabase, mensagemErro } from '../lib/supabase'
 import { brl, dataBR, dataHoraBR, grau, STATUS_OS } from '../lib/format'
 import { Button, Section, Spinner, Alert, Modal, cx, useToast } from '../components/ui'
@@ -37,6 +37,7 @@ function Receita({ receitas }) {
 
 export default function VendaDetalhe() {
   const { id } = useParams()
+  const nav = useNavigate()
   const toast = useToast()
   const [venda, setVenda] = useState(null)
   const [resumo, setResumo] = useState(null)
@@ -57,7 +58,7 @@ export default function VendaDetalhe() {
           receitas(olho, esferico_longe, cilindrico, eixo, adicao, esferico_perto))
       `).eq('id', id).single(),
       supabase.from('v_venda_resumo').select('*').eq('venda_id', id).single(),
-      supabase.from('recebimentos').select('*, parcelas:recebimento_parcelas(numero, valor, vencimento, documento)').eq('venda_id', id).order('created_at'),
+      supabase.from('recebimentos').select('*, detalhe:recebimento_parcelas(numero, valor, vencimento, documento)').eq('venda_id', id).order('created_at'),
     ])
     const err = v.error || r.error || rc.error
     if (err) { setErro(mensagemErro(err)); return }
@@ -98,6 +99,9 @@ export default function VendaDetalhe() {
             {venda.cliente.nome} · {venda.loja.nome} · {venda.vendedor.nome} · {dataHoraBR(venda.data_venda)}
           </p>
         </div>
+        {venda.ordens.length > 0 && venda.status !== 'cancelada' && (
+          <Button variant="secondary" icon={Printer} onClick={() => nav(`/vendas/${venda.id}/imprimir`)}>Imprimir OS</Button>
+        )}
       </div>
 
       {/* Resumo financeiro: o número que importa no balcão */}
@@ -170,7 +174,7 @@ export default function VendaDetalhe() {
                     <span>
                       {dataBR(r.data_entrada + 'T12:00:00')}
                       {r.bandeira && ` · ${r.bandeira}`}{r.nsu && ` · NSU ${r.nsu}`}
-                      {r.parcelas?.length > 0 && ` · ${r.parcelas.length} parcela${r.parcelas.length > 1 ? 's' : ''}, 1º venc. ${dataBR(r.parcelas[0].vencimento + 'T12:00:00')}`}
+                      {r.detalhe?.length > 0 && ` · ${r.detalhe.length} parcela${r.detalhe.length > 1 ? 's' : ''}, 1º venc. ${dataBR([...r.detalhe].sort((a, b) => a.numero - b.numero)[0].vencimento + 'T12:00:00')}`}
                     </span>
                     {r.status === 'ativo' && (
                       <button onClick={() => setEstornar(r)} className="flex items-center gap-1 font-medium hover:text-danger">
@@ -201,7 +205,11 @@ export default function VendaDetalhe() {
       </div>
 
       {venda.ordens.map((o) => (
-        <Section key={o.id} title={`OS ${o.letra} · nº ${o.numero}`} aside={<span className="rounded bg-brand-soft px-2 py-1 text-xs font-semibold text-brand">{STATUS_OS[o.status]}</span>}>
+        <Section key={o.id} title={`OS ${o.letra} · nº ${o.numero}`} aside={
+          <div className="flex items-center gap-2">
+            <span className="rounded bg-brand-soft px-2 py-1 text-xs font-semibold text-brand">{STATUS_OS[o.status]}</span>
+            <Button variant="ghost" size="sm" icon={Printer} onClick={() => nav(`/vendas/${venda.id}/imprimir?os=${o.id}`)}>Imprimir</Button>
+          </div>}>
           <div className="flex flex-col gap-3">
             <p className="text-sm text-muted">Paciente <span className="font-medium text-ink">{o.paciente?.nome}</span> · entrega prevista {dataHoraBR(o.previsao_entrega)}</p>
             <Receita receitas={o.receitas} />

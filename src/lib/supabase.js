@@ -1,10 +1,14 @@
 import { createClient } from '@supabase/supabase-js'
 
-export const supabase = createClient(
-  import.meta.env.VITE_SUPABASE_URL,
-  import.meta.env.VITE_SUPABASE_KEY,
-  { db: { schema: 'pdv' } }
-)
+const URL = import.meta.env.VITE_SUPABASE_URL
+const KEY = import.meta.env.VITE_SUPABASE_KEY
+
+// Sem as variáveis o app não consegue falar com o banco: avisa em vez de ficar em branco
+export const CONFIG_FALTANDO = !URL || !KEY
+
+export const supabase = CONFIG_FALTANDO
+  ? null
+  : createClient(URL, KEY, { db: { schema: 'pdv' } })
 
 // Login só com usuário: o e-mail técnico nunca aparece na tela
 export const LOGIN_DOMAIN = 'pdv.idealize'

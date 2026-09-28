@@ -257,10 +257,10 @@ export default function OSForm({ os, onChange, cliente, empresaId, lentes, armac
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
             {['OD', 'OE'].map((o) => (
               <div key={o} className="contents">
-                <Field label={`DNP ${o} (mm)`} error={erros[`dnp${o}`]}>
+                <Field label={`DNP ${o} (mm)`} required error={erros[`dnp${o}`]}>
                   {({ id, invalid }) => <Input id={id} invalid={invalid} inputMode="decimal" className="num" value={os.lentes[o].dnp} onChange={(e) => setOlhoLente(o, { dnp: num(e.target.value) })} placeholder="20 a 45" />}
                 </Field>
-                <Field label={`Altura ${o} (mm)`} error={erros[`altura${o}`]}>
+                <Field label={`Altura ${o} (mm)`} required error={erros[`altura${o}`]}>
                   {({ id, invalid }) => <Input id={id} invalid={invalid} inputMode="decimal" className="num" value={os.lentes[o].altura} onChange={(e) => setOlhoLente(o, { altura: num(e.target.value) })} placeholder="10 a 40" />}
                 </Field>
               </div>

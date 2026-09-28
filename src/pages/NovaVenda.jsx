@@ -40,10 +40,14 @@ function validarOS(os) {
   if (!os.lentes.OD.produto && !os.lentes.OE.produto) e.lentes = 'Escolha a lente.'
   if (!os.armacao.propria && !os.armacao.produto) e.armacao = 'Escolha a armação ou marque “Armação do cliente”.'
   for (const o of ['OD', 'OE']) {
+    if (!os.lentes[o].produto) continue
     const d = parseNum(os.lentes[o].dnp), a = parseNum(os.lentes[o].altura)
-    if (d !== null && (Number.isNaN(d) || d < 20 || d > 45)) e[`dnp${o}`] = 'Entre 20 e 45'
-    if (a !== null && (Number.isNaN(a) || a < 10 || a > 40)) e[`altura${o}`] = 'Entre 10 e 40'
+    if (d === null) e[`dnp${o}`] = 'Obrigatória'
+    else if (Number.isNaN(d) || d < 20 || d > 45) e[`dnp${o}`] = 'Entre 20 e 45'
+    if (a === null) e[`altura${o}`] = 'Obrigatória'
+    else if (Number.isNaN(a) || a < 10 || a > 40) e[`altura${o}`] = 'Entre 10 e 40'
   }
+  if (['dnpOD', 'dnpOE', 'alturaOD', 'alturaOE'].some((k) => e[k])) e.lentes = e.lentes || 'Informe DNP e altura de cada olho.'
   return e
 }
 
