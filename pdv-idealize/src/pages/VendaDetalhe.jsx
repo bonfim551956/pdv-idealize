@@ -100,7 +100,7 @@ export default function VendaDetalhe() {
           </p>
         </div>
         {venda.ordens.length > 0 && venda.status !== 'cancelada' && (
-          <Button variant="secondary" icon={Printer} onClick={() => nav(`/vendas/${venda.id}/imprimir`)}>{venda.ordens.length > 1 ? 'Imprimir todas as OS' : 'Imprimir OS'}</Button>
+          <Button variant="secondary" icon={Printer} onClick={() => nav(`/vendas/${venda.id}/imprimir`)}>Imprimir OS</Button>
         )}
       </div>
 

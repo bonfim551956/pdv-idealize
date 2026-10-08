@@ -1,0 +1,35 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html { -webkit-text-size-adjust: 100%; }
+  body { @apply bg-bg text-ink font-sans text-base antialiased; }
+  input, select, textarea, button { font: inherit; }
+  :focus-visible { @apply outline-none ring-2 ring-brand ring-offset-2 ring-offset-bg; }
+  .num { font-variant-numeric: tabular-nums; }
+  h1, h2 { @apply font-display tracking-tight; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+}
+
+/* ---------- Ordem de serviço impressa (A4) ---------- */
+.folha-os {
+  width: 210mm;
+  height: 297mm;
+  padding: 8mm 10mm;
+  overflow: hidden;
+  box-sizing: border-box;
+}
+@media print {
+  @page { size: A4; margin: 0; }
+  html, body { background: #FAFAFA !important; }
+  .no-print { display: none !important; }
+  .folha-os { break-after: page; page-break-after: always; }
+  .folha-os:last-child { break-after: auto; page-break-after: auto; }
+}
+/* Em telas estreitas a folha mantém o tamanho real e rola na horizontal */
+@media screen and (max-width: 840px) {
+  .folha-os { flex-shrink: 0; }
+}

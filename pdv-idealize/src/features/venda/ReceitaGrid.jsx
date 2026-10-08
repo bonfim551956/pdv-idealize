@@ -14,16 +14,16 @@ const MEDIDAS = [
 // 1 coluna do olho + 5 da receita + 2 de medidas
 const GRID_XL = 'xl:grid-cols-[92px_repeat(5,minmax(0,1fr))_repeat(2,minmax(0,0.8fr))]'
 
-function Caixa({ erro, children, travado }) {
+function Caixa({ erro, children }) {
   return (
-    <div className={cx('flex h-12 items-stretch overflow-hidden rounded-md border transition-colors', travado ? 'bg-bg' : 'bg-surface',
+    <div className={cx('flex h-12 items-stretch overflow-hidden rounded-md border bg-surface transition-colors',
       erro ? 'border-danger' : 'border-line focus-within:border-brand focus-within:ring-2 focus-within:ring-brand/20')}>
       {children}
     </div>
   )
 }
 
-function CampoGrau({ campo, valor, onChange, erro, olho, placeholder, travado }) {
+function CampoGrau({ campo, valor, onChange, erro, olho, placeholder }) {
   const passo = (d) => {
     const atual = parseNum(valor)
     const base = atual === null || Number.isNaN(atual) ? 0 : atual
@@ -45,8 +45,8 @@ function CampoGrau({ campo, valor, onChange, erro, olho, placeholder, travado })
   return (
     <div className="flex min-w-0 flex-col gap-1">
       <label htmlFor={id} className="text-xs font-medium text-muted xl:sr-only">{campo.label}</label>
-      <Caixa erro={erro} travado={travado}>
-        {campo.grau && !travado && (
+      <Caixa erro={erro}>
+        {campo.grau && (
           <button type="button" tabIndex={-1} onClick={() => passo(-0.25)} className="w-6 shrink-0 text-muted hover:bg-bg hover:text-ink" aria-label={`Diminuir ${campo.label} ${olho}`}>
             <Minus className="mx-auto h-3 w-3" />
           </button>
@@ -59,11 +59,10 @@ function CampoGrau({ campo, valor, onChange, erro, olho, placeholder, travado })
           onChange={(e) => onChange(e.target.value)}
           onBlur={formatar}
           onKeyDown={teclas}
-          readOnly={travado}
           aria-invalid={!!erro || undefined}
           className="num w-full min-w-0 bg-transparent px-0.5 text-center text-base font-semibold text-ink placeholder:font-normal placeholder:text-muted/60 focus:outline-none"
         />
-        {campo.grau && !travado && (
+        {campo.grau && (
           <button type="button" tabIndex={-1} onClick={() => passo(0.25)} className="w-6 shrink-0 text-muted hover:bg-bg hover:text-ink" aria-label={`Aumentar ${campo.label} ${olho}`}>
             <Plus className="mx-auto h-3 w-3" />
           </button>
@@ -74,17 +73,16 @@ function CampoGrau({ campo, valor, onChange, erro, olho, placeholder, travado })
   )
 }
 
-function CampoMedida({ medida, valor, onChange, erro, olho, travado }) {
+function CampoMedida({ medida, valor, onChange, erro, olho }) {
   const id = `med-${olho}-${medida.key}`
   return (
     <div className="flex min-w-0 flex-col gap-1">
       <label htmlFor={id} className="text-xs font-medium text-muted xl:sr-only">
         {medida.label} (mm)<span className="text-danger"> *</span>
       </label>
-      <Caixa erro={erro} travado={travado}>
+      <Caixa erro={erro}>
         <input
           id={id}
-          readOnly={travado}
           inputMode="decimal"
           value={valor}
           placeholder={`${medida.min}–${medida.max}`}
@@ -99,7 +97,7 @@ function CampoMedida({ medida, valor, onChange, erro, olho, travado }) {
   )
 }
 
-export default function ReceitaGrid({ receita, onChange, exigeAdicao, medidas, onMedida, errosMedidas = {}, travado }) {
+export default function ReceitaGrid({ receita, onChange, exigeAdicao, medidas, onMedida, errosMedidas = {} }) {
   const setCampo = (olho, key, v) => onChange({ ...receita, [olho]: { ...receita[olho], [key]: v } })
   const copiarParaOE = () => onChange({ ...receita, OE: { ...receita.OD } })
 
@@ -129,12 +127,12 @@ export default function ReceitaGrid({ receita, onChange, exigeAdicao, medidas, o
                 <span className="text-sm font-medium text-ink xl:hidden">{o.nome}</span>
               </div>
               {CAMPOS_RECEITA.map((c) => (
-                <CampoGrau key={c.key} campo={c} olho={o.key} valor={r[c.key]} erro={travado ? null : erros[c.key]} travado={travado}
+                <CampoGrau key={c.key} campo={c} olho={o.key} valor={r[c.key]} erro={erros[c.key]}
                   onChange={(v) => setCampo(o.key, c.key, v)}
                   placeholder={c.key === 'esferico_perto' && perto !== null ? grau(perto) : undefined} />
               ))}
               {MEDIDAS.map((m) => (
-                <CampoMedida key={m.key} medida={m} olho={o.key} valor={medidas[o.key][m.key]} travado={travado && m.key === 'dnp'}
+                <CampoMedida key={m.key} medida={m} olho={o.key} valor={medidas[o.key][m.key]}
                   erro={errosMedidas[`${m.key}${o.key}`]} onChange={(v) => onMedida(o.key, { [m.key]: v })} />
               ))}
             </div>
@@ -143,10 +141,10 @@ export default function ReceitaGrid({ receita, onChange, exigeAdicao, medidas, o
       })}
 
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="text-xs text-muted">{travado ? 'Graus e DNP vêm da OS A. Informe só a altura, que depende da armação desta OS.' : 'Digite com vírgula ou use ↑ ↓ para ajustar 0,25. O esférico de perto é sugerido pela adição.'}</p>
-        {!travado && <button type="button" onClick={copiarParaOE} className="flex items-center gap-1 text-sm font-semibold text-brand hover:underline">
+        <p className="text-xs text-muted">Digite com vírgula ou use ↑ ↓ para ajustar 0,25. O esférico de perto é sugerido pela adição.</p>
+        <button type="button" onClick={copiarParaOE} className="flex items-center gap-1 text-sm font-semibold text-brand hover:underline">
           <Copy className="h-4 w-4" aria-hidden /> Copiar receita do OD para o OE
-        </button>}
+        </button>
       </div>
     </div>
   )

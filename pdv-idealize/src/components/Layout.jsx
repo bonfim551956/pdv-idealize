@@ -1,5 +1,5 @@
 import { NavLink } from 'react-router-dom'
-import { ReceiptText, PlusCircle, Glasses, LogOut, Store, BarChart3 } from 'lucide-react'
+import { ReceiptText, PlusCircle, Glasses, LogOut, Store } from 'lucide-react'
 import { useAuth } from '../lib/auth'
 import { cx } from './ui'
 
@@ -12,7 +12,6 @@ export default function Layout({ children }) {
   const links = [
     { to: '/', label: 'Vendas', icon: ReceiptText, end: true },
     { to: '/nova-venda', label: 'Nova venda', icon: PlusCircle },
-    { to: '/relatorios', label: 'Relatórios', icon: BarChart3 },
     ...(isAdmin ? [{ to: '/produtos', label: 'Lentes e preços', icon: Glasses }] : []),
   ]
   const lojaCurta = perfil.loja?.nome?.replace('Óticas Idealize ', '')

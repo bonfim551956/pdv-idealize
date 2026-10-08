@@ -7,7 +7,6 @@ import NovaVenda from './pages/NovaVenda'
 import VendaDetalhe from './pages/VendaDetalhe'
 import Produtos from './pages/Produtos'
 import ImprimirOS from './pages/ImprimirOS'
-import Relatorios from './pages/Relatorios'
 import { Spinner, Alert, Button } from './components/ui'
 
 export default function App() {
@@ -37,7 +36,6 @@ export default function App() {
               <Route path="/" element={<Vendas />} />
               <Route path="/nova-venda" element={<NovaVenda />} />
               <Route path="/vendas/:id" element={<VendaDetalhe />} />
-              <Route path="/relatorios" element={<Relatorios />} />
               <Route path="/produtos" element={isAdmin ? <Produtos /> : <Navigate to="/" />} />
               <Route path="*" element={<Navigate to="/" />} />
             </Routes>

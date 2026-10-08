@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { ArrowLeft, Printer, Scissors } from 'lucide-react'
 import { supabase, mensagemErro } from '../lib/supabase'
@@ -22,33 +22,26 @@ const mm = (v) => (v === null || v === undefined || v === '' ? '' : String(Numbe
 const dia = (iso) => (iso ? dataBR(`${iso}T12:00:00`) : '')
 
 /* ---------- peças ---------- */
-function Cabecalho({ venda, ordens, via, compacto }) {
+function Cabecalho({ venda, os, via }) {
   const l = venda.loja
-  const unica = ordens.length === 1
-  const corExata = { printColorAdjust: 'exact', WebkitPrintColorAdjust: 'exact' }
   return (
-    <header className={cx('flex items-center justify-between gap-3 border-b-[1.5px] border-[#0B6E71]', compacto ? 'pb-[1mm]' : 'pb-[2mm]')}>
+    <header className="flex items-center justify-between gap-3 border-b-[1.5px] border-[#0B6E71] pb-[2mm]">
       <div className="flex items-center gap-3">
-        <img src="/logo.png" alt="Óticas Idealize" className={compacto ? 'h-[6mm] w-auto' : 'h-[9mm] w-auto'} />
-        {!compacto && (
-          <div className="border-l border-[#D2DEDF] pl-3 text-[9px] leading-tight text-[#4E6468]">
-            <p className="text-[10px] font-bold text-[#16272B]">{l.nome}</p>
-            {l.endereco && <p>{l.endereco}</p>}
-            <p>{[l.telefone && `Tel. ${l.telefone}`, l.whatsapp && `WhatsApp ${l.whatsapp}`].filter(Boolean).join(' · ')}</p>
-          </div>
-        )}
-        {compacto && <p className="text-[9px] font-bold">{l.nome}</p>}
+        <img src="/logo.png" alt="Óticas Idealize" className="h-[9mm] w-auto" />
+        <div className="border-l border-[#D2DEDF] pl-3 text-[9px] leading-tight text-[#4E6468]">
+          <p className="text-[10px] font-bold text-[#16272B]">{l.nome}</p>
+          {l.endereco && <p>{l.endereco}</p>}
+          <p>{[l.telefone && `Tel. ${l.telefone}`, l.whatsapp && `WhatsApp ${l.whatsapp}`].filter(Boolean).join(' · ')}</p>
+        </div>
       </div>
       <div className="flex items-center gap-3 text-right">
         <div className="text-[9px] leading-tight text-[#4E6468]">
-          <p>Venda <b className="num text-[#16272B]">{venda.numero}</b>{unica ? ` · OS ${ordens[0].letra}` : ` · ${ordens.length} OS`}</p>
+          <p>Venda <b className="num text-[#16272B]">{venda.numero}</b> · OS {os.letra}</p>
           <p className="num">{dataHoraBR(venda.data_venda)}</p>
         </div>
-        <div className="rounded-[1.5mm] bg-[#0B6E71] px-[2.5mm] py-[1mm] text-[#FAFAFA]" style={corExata}>
+        <div className="rounded-[1.5mm] bg-[#0B6E71] px-[2.5mm] py-[1mm] text-[#FAFAFA]" style={{ printColorAdjust: 'exact', WebkitPrintColorAdjust: 'exact' }}>
           <p className="text-[7px] font-bold uppercase tracking-wider leading-none">{via}</p>
-          <p className={cx('num font-display font-extrabold leading-tight', compacto ? 'text-[13px]' : 'text-[16px]')}>
-            OS {ordens.map((o) => o.numero).join(' · ')}
-          </p>
+          <p className="num font-display text-[16px] font-extrabold leading-tight">OS {os.numero}</p>
         </div>
       </div>
     </header>
@@ -152,7 +145,7 @@ function ViaLoja({ venda, os }) {
   const saldo = Number(venda.total_liquido) - recebido
   return (
     <section className="flex h-[122mm] flex-col gap-[2.5mm] overflow-hidden">
-      <Cabecalho venda={venda} ordens={[os]} via="Via da loja" />
+      <Cabecalho venda={venda} os={os} via="Via da loja" />
       <div className="grid grid-cols-[1.4fr_1fr_1fr_1fr] gap-[3mm]">
         <Dado rotulo="Cliente" forte>{venda.cliente.nome}</Dado>
         <Dado rotulo="CPF">{cpf(venda.cliente.documento)}</Dado>
@@ -200,7 +193,7 @@ function ViaLoja({ venda, os }) {
 function ViaLaboratorio({ venda, os }) {
   return (
     <section className="flex h-[98mm] flex-col gap-[2.5mm] overflow-hidden">
-      <Cabecalho venda={venda} ordens={[os]} via="Via do laboratório" />
+      <Cabecalho venda={venda} os={os} via="Via do laboratório" />
       <div className="grid grid-cols-[1.6fr_1fr_1fr_1fr] gap-[3mm]">
         <Dado rotulo="Paciente" forte>{os.paciente?.nome}</Dado>
         <Dado rotulo="Receita de">{dia(os.data_receita)}</Dado>
@@ -264,177 +257,6 @@ function ViaCliente({ venda, os }) {
   )
 }
 
-/* ---------- várias OS na mesma impressão ---------- */
-function Pagamento({ venda, itens }) {
-  const ativos = venda.recebimentos.filter((r) => r.status === 'ativo')
-  const recebido = ativos.reduce((s, r) => s + Number(r.valor), 0)
-  const saldo = Number(venda.total_liquido) - recebido
-  return (
-    <div className="grid grid-cols-[1.5fr_1fr] gap-[4mm] text-[10px]">
-      <div>
-        <Rotulo>Produtos</Rotulo>
-        {itens.slice(0, MAX_ITENS + 1).map((i, k) => (
-          <p key={k} className="flex justify-between gap-2 border-b border-dotted border-[#D2DEDF] leading-snug">
-            <span className="truncate">{i.osLetra ? `OS ${i.osLetra} · ` : ''}{Number(i.quantidade)}× {i.descricao}</span>
-            <span className="num shrink-0">{brl(i.total)}</span>
-          </p>
-        ))}
-        {itens.length > MAX_ITENS + 1 && <p className="text-[#4E6468]">+ {itens.length - MAX_ITENS - 1} itens</p>}
-      </div>
-      <div className="leading-snug">
-        <Rotulo>Pagamento</Rotulo>
-        {Number(venda.total_desconto) > 0 && <p className="flex justify-between"><span>Desconto</span><span className="num">− {brl(venda.total_desconto)}</span></p>}
-        <p className="flex justify-between font-bold"><span>Total</span><span className="num">{brl(venda.total_liquido)}</span></p>
-        {ativos.slice(0, 3).map((r, k) => (
-          <p key={k} className="flex justify-between text-[#4E6468]">
-            <span className="truncate">{FORMAS[r.forma]}{r.forma === 'CARTAO' ? ` ${r.modalidade === 'DEBITO' ? 'déb.' : `${r.parcelas}x`}` : ''}{r.detalhe?.length > 1 ? ` ${r.detalhe.length}x` : ''}</span>
-            <span className="num">{brl(r.valor)}</span>
-          </p>
-        ))}
-        <p className="flex justify-between border-t border-[#16272B] font-bold"><span>{saldo > 0.004 ? 'Saldo na retirada' : 'Situação'}</span><span className="num">{saldo > 0.004 ? brl(saldo) : 'Quitado'}</span></p>
-      </div>
-    </div>
-  )
-}
-
-function ViaLojaVarias({ venda, ordens }) {
-  const contato = venda.cliente.contatos?.find((c) => c.principal) || venda.cliente.contatos?.[0]
-  const letraDe = Object.fromEntries(ordens.map((o) => [o.id, o.letra]))
-  const itens = venda.itens.map((i) => ({ ...i, osLetra: letraDe[i.os_id] }))
-  return (
-    <section className="flex flex-col gap-[2mm]">
-      <Cabecalho venda={venda} ordens={ordens} via="Via da loja" />
-      <div className="grid grid-cols-[1.4fr_1fr_1fr_1fr] gap-[3mm]">
-        <Dado rotulo="Cliente" forte>{venda.cliente.nome}</Dado>
-        <Dado rotulo="CPF">{cpf(venda.cliente.documento)}</Dado>
-        <Dado rotulo="Contato">{fone(contato?.valor)}</Dado>
-        <Dado rotulo="Consultor">{venda.vendedor.nome}</Dado>
-      </div>
-      {ordens.map((os) => (
-        <div key={os.id} className="flex flex-col gap-[1mm] rounded-[1.5mm] border border-[#D2DEDF] p-[1.5mm]">
-          <p className="flex flex-wrap gap-x-3 text-[10px]">
-            <b className="font-display">OS {os.letra} · nº {os.numero}</b>
-            <span>Paciente <b>{os.paciente?.nome}</b></span>
-            <span className="ml-auto">Entrega <b className="num">{dataHoraBR(os.previsao_entrega)}</b></span>
-          </p>
-          <TabelaReceita os={os} />
-          <LenteArmacao os={os} />
-        </div>
-      ))}
-      <Pagamento venda={venda} itens={itens} />
-      <div className="mt-[3mm] grid grid-cols-2 gap-[8mm] text-[8px] text-[#4E6468]">
-        <p className="border-t border-[#16272B] pt-[0.5mm]">Recebi os óculos em ___/___/_____ · assinatura do cliente</p>
-        <p className="border-t border-[#16272B] pt-[0.5mm]">Entregue por</p>
-      </div>
-    </section>
-  )
-}
-
-function ViaLabCompacta({ venda, os }) {
-  return (
-    <section className="flex flex-col gap-[1.5mm]">
-      <Cabecalho venda={venda} ordens={[os]} via="Via do laboratório" compacto />
-      <div className="grid grid-cols-[1.6fr_1fr_1fr_1fr] gap-[3mm]">
-        <Dado rotulo="Paciente" forte>{os.paciente?.nome}</Dado>
-        <Dado rotulo="Receita de">{dia(os.data_receita)}</Dado>
-        <Dado rotulo="Laboratório">{os.laboratorio?.nome || 'Não informado'}</Dado>
-        <Dado rotulo="Entregar na loja até" forte>{dataHoraBR(os.previsao_entrega)}</Dado>
-      </div>
-      <TabelaReceita os={os} prisma />
-      <LenteArmacao os={os} />
-      <div className="grid grid-cols-[1fr_4fr] gap-[3mm]">
-        <Dado rotulo="Iniciais">{os.iniciais}</Dado>
-        <div className="min-w-0">
-          <Rotulo>Observações</Rotulo>
-          <p className="line-clamp-1 text-[10px] leading-snug">{os.observacoes || '—'}</p>
-        </div>
-      </div>
-      <div className="mt-[2mm] grid grid-cols-3 gap-[6mm] text-[8px] text-[#4E6468]">
-        {['Surfaçagem', 'Montagem', 'Conferência final'].map((t) => (
-          <p key={t} className="flex items-end gap-1 border-t border-[#16272B] pt-[0.5mm]">
-            <span className="inline-block h-[2.5mm] w-[2.5mm] border border-[#16272B]" /> {t}
-          </p>
-        ))}
-      </div>
-    </section>
-  )
-}
-
-function ViaClienteVarias({ venda, ordens }) {
-  const l = venda.loja
-  const retirada = ordens.map((o) => o.previsao_entrega).sort().at(-1)
-  return (
-    <section className="flex h-[34mm] items-stretch gap-[5mm] overflow-hidden rounded-[2mm] border border-[#D2DEDF]">
-      <span className="w-[2mm] shrink-0 bg-[#FC9E3C]" style={{ printColorAdjust: 'exact', WebkitPrintColorAdjust: 'exact' }} />
-      <div className="flex w-[62mm] shrink-0 flex-col justify-center gap-[1mm] py-[2mm]">
-        <img src="/logo.png" alt="Óticas Idealize" className="h-[8mm] w-auto self-start" />
-        <div className="text-[9px] leading-tight text-[#4E6468]">
-          <p className="font-bold text-[#16272B]">{l.nome}</p>
-          {l.endereco && <p>{l.endereco}</p>}
-          {(l.telefone || l.whatsapp) && <p>{[l.telefone && `Tel. ${l.telefone}`, l.whatsapp && `WhatsApp ${l.whatsapp}`].filter(Boolean).join(' · ')}</p>}
-        </div>
-      </div>
-      <div className="grid flex-1 grid-cols-2 content-center gap-x-[5mm] gap-y-[2mm] py-[2mm] pr-[5mm]">
-        <div>
-          <p className="text-[8px] font-bold uppercase tracking-wider text-[#0B6E71]">Via do cliente</p>
-          <p className="num font-display text-[14px] font-extrabold leading-tight">OS {ordens.map((o) => o.numero).join(' · ')}</p>
-        </div>
-        <div>
-          <Rotulo>Valor da compra</Rotulo>
-          <p className="num font-display text-[14px] font-extrabold leading-tight">{brl(venda.total_liquido)}</p>
-        </div>
-        <div>
-          <Rotulo>Data da compra</Rotulo>
-          <p className="num text-[11px] font-bold">{dataBR(venda.data_venda)}</p>
-        </div>
-        <div>
-          <Rotulo>Retirada a partir de</Rotulo>
-          <p className="num text-[11px] font-bold">{dataHoraBR(retirada)}</p>
-        </div>
-      </div>
-    </section>
-  )
-}
-
-/* Monta as folhas: tenta tudo numa A4; se não couber, a via da loja + cliente vão
-   na 1ª folha e as vias do laboratório seguem nas próximas, até 3 por folha. */
-function folhasPara(ordens, separar) {
-  if (ordens.length === 1) return [{ tipo: 'unica', ordens }]
-  if (!separar) return [{ tipo: 'consolidada', ordens }]
-  const folhas = [{ tipo: 'loja_cliente', ordens }]
-  for (let i = 0; i < ordens.length; i += 3) folhas.push({ tipo: 'labs', ordens: ordens.slice(i, i + 3) })
-  return folhas
-}
-
-function Folha({ folha, venda, refFolha }) {
-  const { tipo, ordens } = folha
-  return (
-    <article ref={refFolha} className="folha-os flex flex-col bg-[#FAFAFA] text-[#16272B] shadow-lg print:shadow-none">
-      {tipo === 'unica' && (
-        <>
-          <ViaLoja venda={venda} os={ordens[0]} /><Recorte />
-          <ViaLaboratorio venda={venda} os={ordens[0]} /><Recorte />
-          <ViaCliente venda={venda} os={ordens[0]} />
-        </>
-      )}
-      {tipo === 'consolidada' && (
-        <>
-          <ViaLojaVarias venda={venda} ordens={ordens} />
-          {ordens.map((os) => <div key={os.id}><Recorte /><ViaLabCompacta venda={venda} os={os} /></div>)}
-          <div className="mt-auto"><Recorte /><ViaClienteVarias venda={venda} ordens={ordens} /></div>
-        </>
-      )}
-      {tipo === 'loja_cliente' && (
-        <>
-          <ViaLojaVarias venda={venda} ordens={ordens} />
-          <div className="mt-auto"><Recorte /><ViaClienteVarias venda={venda} ordens={ordens} /></div>
-        </>
-      )}
-      {tipo === 'labs' && ordens.map((os, i) => <div key={os.id}>{i > 0 && <Recorte />}<ViaLabCompacta venda={venda} os={os} /></div>)}
-    </article>
-  )
-}
-
 export default function ImprimirOS() {
   const { id } = useParams()
   const [params] = useSearchParams()
@@ -462,17 +284,6 @@ export default function ImprimirOS() {
   }, [id])
 
   const ordens = useMemo(() => (venda ? venda.ordens.filter((o) => osSel === 'todas' || o.id === osSel) : []), [venda, osSel])
-  const [separar, setSeparar] = useState(false)
-  const refs = useRef([])
-  useEffect(() => setSeparar(false), [osSel, venda])
-  const folhas = folhasPara(ordens, separar)
-  refs.current.length = folhas.length
-  // Se a folha consolidada não couber na A4, reorganiza automaticamente em mais folhas
-  useLayoutEffect(() => {
-    if (separar) return
-    const estourou = refs.current.some((el) => el && el.scrollHeight > el.clientHeight + 2)
-    if (estourou && ordens.length > 1) setSeparar(true)
-  })
   useEffect(() => { if (venda) document.title = `OS venda ${venda.numero} - Óticas Idealize` }, [venda])
 
   if (erro) return <div className="mx-auto max-w-3xl p-6"><Alert>{erro}</Alert></div>
@@ -486,11 +297,10 @@ export default function ImprimirOS() {
           <div className="flex items-center gap-3">
             {venda.ordens.length > 1 && (
               <select aria-label="Ordem de serviço" value={osSel} onChange={(e) => setOsSel(e.target.value)} className="h-10 rounded-md border border-line bg-surface px-2 text-sm">
-                <option value="todas">Todas as OS juntas</option>
+                <option value="todas">Todas as OS ({venda.ordens.length} folhas)</option>
                 {venda.ordens.map((o) => <option key={o.id} value={o.id}>OS {o.letra} · nº {o.numero}</option>)}
               </select>
             )}
-            <span className="text-sm text-muted">{folhas.length} {folhas.length === 1 ? 'folha' : 'folhas'} A4</span>
             <Button size="sm" icon={Printer} onClick={() => window.print()}>Imprimir</Button>
           </div>
         </div>
@@ -500,10 +310,18 @@ export default function ImprimirOS() {
         <div className="mx-auto max-w-[210mm] p-6"><Alert tone="warn">Esta venda não tem ordem de serviço.</Alert></div>
       ) : (
         <div className="flex flex-col items-start gap-6 overflow-x-auto py-6 md:items-center print:block print:overflow-visible print:py-0">
-          {folhas.map((f, i) => <Folha key={`${f.tipo}-${i}`} folha={f} venda={venda} refFolha={(el) => (refs.current[i] = el)} />)}
+          {ordens.map((os) => (
+            <article key={os.id} className="folha-os flex flex-col bg-[#FAFAFA] text-[#16272B] shadow-lg print:shadow-none">
+              <ViaLoja venda={venda} os={os} />
+              <Recorte />
+              <ViaLaboratorio venda={venda} os={os} />
+              <Recorte />
+              <ViaCliente venda={venda} os={os} />
+            </article>
+          ))}
         </div>
       )}
     </div>
   )
 }
-export { ViaLoja, ViaLaboratorio, ViaCliente, ViaLojaVarias, ViaLabCompacta, ViaClienteVarias }
+export { ViaLoja, ViaLaboratorio, ViaCliente }

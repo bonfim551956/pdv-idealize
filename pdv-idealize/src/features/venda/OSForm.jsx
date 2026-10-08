@@ -8,7 +8,6 @@ import ClientePicker from './ClientePicker'
 
 export const novaOS = (letra) => ({
   letra,
-  usarReceitaA: letra !== 'A', // OS B, C… herdam graus e DNP da OS A; altura é de cada OS
   pacienteEhCliente: true,
   paciente: null,
   data_receita: hojeISO(),
@@ -151,7 +150,7 @@ function ArmacaoBusca({ armacoes, value, onChange }) {
 const num = (v) => v.replace(/[^\d,.]/g, '')
 
 /* ---------- OS completa ---------- */
-export default function OSForm({ os, osA, onChange, cliente, empresaId, lentes, armacoes, laboratorios, erros = {} }) {
+export default function OSForm({ os, onChange, cliente, empresaId, lentes, armacoes, laboratorios, erros = {} }) {
   const set = (patch) => onChange({ ...os, ...patch })
   const setArm = (patch) => set({ armacao: { ...os.armacao, ...patch } })
   const setLen = (patch) => set({ lentes: { ...os.lentes, ...patch } })
@@ -204,22 +203,9 @@ export default function OSForm({ os, osA, onChange, cliente, empresaId, lentes, 
         </div>
       </Section>
 
-      <Section title="Receita e medidas" aside={osA && (
-        <Switch checked={os.usarReceitaA} onCheckedChange={(v) => set(v ? { usarReceitaA: true } : {
-          usarReceitaA: false,
-          // ao desligar, a OS começa com uma cópia da receita da OS A para ajustar
-          receita: JSON.parse(JSON.stringify(osA.receita)),
-          lentes: { ...os.lentes, OD: { ...os.lentes.OD, dnp: osA.lentes.OD.dnp }, OE: { ...os.lentes.OE, dnp: osA.lentes.OE.dnp } },
-        })} label="Mesma receita e DNP da OS A" />
-      )}>
-        {osA && os.usarReceitaA ? (
-          <ReceitaGrid travado receita={osA.receita} onChange={() => {}} exigeAdicao={multifocal}
-            medidas={{ OD: { dnp: osA.lentes.OD.dnp, altura: os.lentes.OD.altura }, OE: { dnp: osA.lentes.OE.dnp, altura: os.lentes.OE.altura } }}
-            onMedida={(olho, patch) => patch.altura !== undefined && setOlhoLente(olho, { altura: patch.altura })} errosMedidas={erros} />
-        ) : (
-          <ReceitaGrid receita={os.receita} onChange={(receita) => set({ receita })} exigeAdicao={multifocal}
-            medidas={os.lentes} onMedida={setOlhoLente} errosMedidas={erros} />
-        )}
+      <Section title="Receita e medidas">
+        <ReceitaGrid receita={os.receita} onChange={(receita) => set({ receita })} exigeAdicao={multifocal}
+          medidas={os.lentes} onMedida={setOlhoLente} errosMedidas={erros} />
         {erros.receita && <p className="mt-2 text-sm text-danger" role="alert">{erros.receita}</p>}
       </Section>
 

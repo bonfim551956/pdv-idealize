@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import * as Tabs from '@radix-ui/react-tabs'
 import { AnimatePresence, motion } from 'framer-motion'
@@ -8,25 +8,11 @@ import { useAuth } from '../lib/auth'
 import { brl, parseNum } from '../lib/format'
 import { validarOlho, olhoTemDados, olhoParaPayload } from '../lib/receita'
 import { Button, Field, Input, Select, Switch, Section, Spinner, Alert, Textarea, cx, useToast } from '../components/ui'
-import ClienteFicha, { fichaVazia } from '../features/venda/ClienteFicha'
+import ClientePicker, { ORIGENS } from '../features/venda/ClientePicker'
 import OSForm, { novaOS } from '../features/venda/OSForm'
 
 const PASSOS = ['Cliente e vendedor', 'Ordens de serviço', 'Itens e confirmação']
 const LETRAS = 'ABCDEFGH'
-
-// Receita e DNP efetivas: OS sincronizadas usam as da OS A; a altura é sempre da própria OS
-export function efetiva(os, osA) {
-  if (!osA || os.letra === 'A' || !os.usarReceitaA) return os
-  return {
-    ...os,
-    receita: osA.receita,
-    lentes: {
-      ...os.lentes,
-      OD: { ...os.lentes.OD, dnp: osA.lentes.OD.dnp },
-      OE: { ...os.lentes.OE, dnp: osA.lentes.OE.dnp },
-    },
-  }
-}
 
 function itensDaOS(os) {
   const out = []
@@ -79,9 +65,7 @@ export default function NovaVenda() {
   const lojaId = perfil.loja_id
   const vendedorId = perfil.id
   const [cliente, setCliente] = useState(null)
-  const fichaRef = useRef(null)
-  const [ficha, setFicha] = useState(fichaVazia)
-  const [avancando, setAvancando] = useState(false)
+  const [meioContato, setMeioContato] = useState('')
   const [tipo, setTipo] = useState('VENDA')
   const [observacoes, setObservacoes] = useState('')
   const [gerarOS, setGerarOS] = useState(true)
@@ -114,6 +98,8 @@ export default function NovaVenda() {
     })()
   }, [])
 
+  useEffect(() => { if (cliente?.origem && !meioContato) setMeioContato(cliente.origem) }, [cliente]) // eslint-disable-line
+
   const empresaId = dados?.lojas.find((l) => l.id === lojaId)?.empresa_id
 
   const itens = useMemo(() => {
@@ -139,23 +125,21 @@ export default function NovaVenda() {
     setOsAtiva(letra)
   }
   const removerOS = (letra) => {
-    // materializa a receita herdada antes de reordenar as letras
-    const base = osList.map((o) => ({ ...efetiva(o, osList[0]), usarReceitaA: o.usarReceitaA }))
-    const restante = base.filter((o) => o.letra !== letra).map((o, i) => ({ ...o, letra: LETRAS[i], usarReceitaA: i === 0 ? false : o.usarReceitaA }))
+    const restante = osList.filter((o) => o.letra !== letra).map((o, i) => ({ ...o, letra: LETRAS[i] }))
     setOsList(restante)
     setOsAtiva('A')
   }
 
-  const avancar = async () => {
+  const avancar = () => {
     if (passo === 0) {
-      setAvancando(true)
-      const c = await fichaRef.current?.salvar()
-      setAvancando(false)
-      if (!c) { window.scrollTo({ top: 0, behavior: 'smooth' }); return }
-      setCliente(c)
+      const e = {}
+      if (!cliente) e.cliente = 'Escolha ou cadastre o cliente'
+      if (!meioContato) e.meio = 'Informe o meio de contato'
+      setErros(e)
+      if (Object.keys(e).length) return
       setPasso(gerarOS ? 1 : 2)
     } else if (passo === 1) {
-      const todos = Object.fromEntries(osList.map((o) => [o.letra, validarOS(efetiva(o, osList[0]))]))
+      const todos = Object.fromEntries(osList.map((o) => [o.letra, validarOS(o)]))
       setErrosOS(todos)
       const comErro = osList.find((o) => Object.keys(todos[o.letra]).length)
       if (comErro) { setOsAtiva(comErro.letra); window.scrollTo({ top: 0, behavior: 'smooth' }); return }
@@ -175,9 +159,9 @@ export default function NovaVenda() {
       cliente_id: cliente.id,
       tipo,
       observacoes,
-      campos_extras: { meio_contato: cliente.origem },
+      campos_extras: { meio_contato: meioContato },
       confirmar: true,
-      os: gerarOS ? osList.map((o) => efetiva(o, osList[0])).map((os) => ({
+      os: gerarOS ? osList.map((os) => ({
         letra: os.letra,
         paciente_id: os.pacienteEhCliente ? null : os.paciente?.id,
         laboratorio_id: os.laboratorio_id || null,
@@ -239,7 +223,17 @@ export default function NovaVenda() {
           {passo === 0 && (
             <div className="flex flex-col gap-6">
               <Section title="Cliente">
-                <ClienteFicha ref={fichaRef} empresaId={empresaId} onClienteSalvo={setCliente} ficha={ficha} setFicha={setFicha} />
+                <div className="flex flex-col gap-4">
+                  <ClientePicker value={cliente} onChange={setCliente} empresaId={empresaId} error={erros.cliente} />
+                  <Field label="Meio de contato" required error={erros.meio} className="sm:max-w-xs">
+                    {({ id, invalid }) => (
+                      <Select id={id} invalid={invalid} value={meioContato} onChange={(e) => setMeioContato(e.target.value)}>
+                        <option value="">Selecione</option>
+                        {ORIGENS.map((o) => <option key={o}>{o}</option>)}
+                      </Select>
+                    )}
+                  </Field>
+                </div>
               </Section>
               <Section title="Venda">
                 <div className="grid gap-4 sm:grid-cols-3">
@@ -296,7 +290,7 @@ export default function NovaVenda() {
                       <Button variant="danger" size="sm" icon={Trash2} onClick={() => removerOS(o.letra)}>Remover OS {o.letra}</Button>
                     </div>
                   )}
-                  <OSForm os={o} osA={o.letra === 'A' ? null : osList[0]} onChange={(n) => atualizarOS(o.letra, n)} cliente={cliente} empresaId={empresaId}
+                  <OSForm os={o} onChange={(n) => atualizarOS(o.letra, n)} cliente={cliente} empresaId={empresaId}
                     lentes={dados.lentes} armacoes={dados.armacoes} laboratorios={dados.laboratorios} erros={errosOS[o.letra]} />
                 </Tabs.Content>
               ))}
@@ -401,7 +395,7 @@ export default function NovaVenda() {
 
       <div className="flex justify-between border-t border-line pt-4">
         {passo > 0 ? <Button variant="secondary" icon={ArrowLeft} onClick={voltar}>Voltar</Button> : <span />}
-        {passo < 2 && <Button onClick={avancar} loading={avancando}>{passo === 0 ? 'Salvar cliente e continuar' : 'Continuar'}</Button>}
+        {passo < 2 && <Button onClick={avancar}>Continuar</Button>}
       </div>
     </div>
   )
