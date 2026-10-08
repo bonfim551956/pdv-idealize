@@ -1,5 +1,6 @@
 import { NavLink } from 'react-router-dom'
-import { ReceiptText, PlusCircle, Glasses, LogOut, Store, BarChart3 } from 'lucide-react'
+import { ReceiptText, PlusCircle, Glasses, LogOut, Store, BarChart3, Users } from 'lucide-react'
+import { PERFIS } from '../lib/permissoes'
 import { useAuth } from '../lib/auth'
 import { cx } from './ui'
 
@@ -8,12 +9,13 @@ export function Logo({ branca, className }) {
 }
 
 export default function Layout({ children }) {
-  const { perfil, isAdmin, sair } = useAuth()
+  const { perfil, perm, sair } = useAuth()
   const links = [
     { to: '/', label: 'Vendas', icon: ReceiptText, end: true },
     { to: '/nova-venda', label: 'Nova venda', icon: PlusCircle },
     { to: '/relatorios', label: 'Relatórios', icon: BarChart3 },
-    ...(isAdmin ? [{ to: '/produtos', label: 'Lentes e preços', icon: Glasses }] : []),
+    ...(perm.produtos ? [{ to: '/produtos', label: 'Lentes e preços', icon: Glasses }] : []),
+    ...(perm.usuarios ? [{ to: '/usuarios', label: 'Usuários', icon: Users }] : []),
   ]
   const lojaCurta = perfil.loja?.nome?.replace('Óticas Idealize ', '')
 
@@ -50,7 +52,7 @@ export default function Layout({ children }) {
             </span>
             <div className="min-w-0 text-sm leading-tight">
               <p className="truncate font-semibold">{perfil.nome}</p>
-              <p className="flex items-center gap-1 text-muted"><Store className="h-3 w-3" aria-hidden /> {lojaCurta}{isAdmin && ' · admin'}</p>
+              <p className="flex items-center gap-1 text-muted"><Store className="h-3 w-3" aria-hidden /> {lojaCurta} · {PERFIS[perfil.cargo]?.nome}</p>
             </div>
           </div>
           <button onClick={sair} className="flex items-center gap-2 text-sm text-muted hover:text-danger">

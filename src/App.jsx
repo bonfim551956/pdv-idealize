@@ -8,10 +8,11 @@ import VendaDetalhe from './pages/VendaDetalhe'
 import Produtos from './pages/Produtos'
 import ImprimirOS from './pages/ImprimirOS'
 import Relatorios from './pages/Relatorios'
+import Usuarios from './pages/Usuarios'
 import { Spinner, Alert, Button } from './components/ui'
 
 export default function App() {
-  const { session, perfil, carregando, erroPerfil, isAdmin, sair } = useAuth()
+  const { session, perfil, carregando, erroPerfil, perm, sair } = useAuth()
 
   if (carregando) return <div className="grid min-h-screen place-items-center"><Spinner /></div>
   if (!session) return <Login />
@@ -38,7 +39,8 @@ export default function App() {
               <Route path="/nova-venda" element={<NovaVenda />} />
               <Route path="/vendas/:id" element={<VendaDetalhe />} />
               <Route path="/relatorios" element={<Relatorios />} />
-              <Route path="/produtos" element={isAdmin ? <Produtos /> : <Navigate to="/" />} />
+              <Route path="/produtos" element={perm.produtos ? <Produtos /> : <Navigate to="/" />} />
+              <Route path="/usuarios" element={perm.usuarios ? <Usuarios /> : <Navigate to="/" />} />
               <Route path="*" element={<Navigate to="/" />} />
             </Routes>
           </Layout>

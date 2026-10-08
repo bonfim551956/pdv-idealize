@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useState, useCallback } from 'react'
 import { supabase, usuarioParaEmail } from './supabase'
+import { permissoes } from './permissoes'
 
 const AuthCtx = createContext(null)
 export const useAuth = () => useContext(AuthCtx)
@@ -39,10 +40,11 @@ export function AuthProvider({ children }) {
     if (error) throw error
   }
   const sair = () => supabase.auth.signOut()
-  const isAdmin = perfil?.cargo === 'admin'
+  const perm = permissoes(perfil?.cargo)
+  const isAdmin = perm.todasLojas // vê todas as lojas (administrativo para cima)
 
   return (
-    <AuthCtx.Provider value={{ session, perfil, isAdmin, carregando, erroPerfil, entrar, sair }}>
+    <AuthCtx.Provider value={{ session, perfil, perm, isAdmin, carregando, erroPerfil, entrar, sair }}>
       {children}
     </AuthCtx.Provider>
   )

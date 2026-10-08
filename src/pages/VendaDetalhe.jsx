@@ -205,7 +205,7 @@ export default function VendaDetalhe() {
       </div>
 
       {venda.ordens.map((o) => (
-        <Section key={o.id} title={`OS ${o.letra} · nº ${o.numero}`} aside={
+        <Section key={o.id} title={`OS ${o.numero}-${o.letra}`} aside={
           <div className="flex items-center gap-2">
             <span className="rounded bg-brand-soft px-2 py-1 text-xs font-semibold text-brand">{STATUS_OS[o.status]}</span>
             <Button variant="ghost" size="sm" icon={Printer} onClick={() => nav(`/vendas/${venda.id}/imprimir?os=${o.id}`)}>Imprimir</Button>
