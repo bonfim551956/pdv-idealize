@@ -1,4 +1,4 @@
-import { forwardRef, useEffect, useImperativeHandle, useState } from 'react'
+import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react'
 import { Search, UserCheck, X, Loader2 } from 'lucide-react'
 import { supabase, mensagemErro } from '../../lib/supabase'
 import { Field, Input, Select, Button, Alert, cx } from '../../components/ui'
@@ -30,6 +30,11 @@ const ClienteFicha = forwardRef(function ClienteFicha({ empresaId, onClienteSalv
   const [busca, setBusca] = useState('')
   const [res, setRes] = useState([])
   const [buscandoCep, setBuscandoCep] = useState(false)
+  const [avisoCep, setAvisoCep] = useState(null)
+  const [avisoCpf, setAvisoCpf] = useState(null)
+  const [buscandoCpf, setBuscandoCpf] = useState(false)
+  const numeroRef = useRef(null)
+  const logradouroRef = useRef(null)
 
   const set = (k) => (e) => setF((x) => ({ ...x, [k]: e.target.value }))
 
@@ -63,19 +68,43 @@ const ClienteFicha = forwardRef(function ClienteFicha({ empresaId, onClienteSalv
     setF(ficha); setErros({})
   }
 
-  const limpar = () => { setF({ ...vazio }); setErros({}); setErro(null) }
+  const limpar = () => { setF({ ...vazio }); setErros({}); setErro(null); setAvisoCpf(null) }
 
-  // CEP preenche o endereço automaticamente (ViaCEP)
-  const buscarCep = async () => {
-    const cep = soDigitos(f.cep)
+  // CPF completo e válido: se já é cliente da Idealize, preenche a ficha inteira (sem custo)
+  const reconhecerCpf = async (cpfMascarado) => {
+    const doc = soDigitos(cpfMascarado)
+    if (doc.length !== 11 || !cpfValido(doc) || f.id) return
+    setBuscandoCpf(true)
+    const { data } = await supabase.from('clientes').select('id, nome, documento').eq('documento', doc).limit(1).maybeSingle()
+    setBuscandoCpf(false)
+    if (data) {
+      await escolher(data)
+      setAvisoCpf(`Cliente encontrado pelo CPF: ${data.nome}. Os dados foram preenchidos; confira com o cliente.`)
+    } else setAvisoCpf(null)
+  }
+
+  // CEP preenche o endereço sozinho assim que tiver 8 dígitos (ViaCEP, com BrasilAPI de reserva)
+  const buscarCep = async (cepDigitado) => {
+    const cep = soDigitos(cepDigitado ?? f.cep)
     if (cep.length !== 8) return
-    setBuscandoCep(true)
+    setBuscandoCep(true); setAvisoCep(null)
+    setErros((e) => ({ ...e, cep: undefined }))
+    let end = null
     try {
       const r = await fetch(`https://viacep.com.br/ws/${cep}/json/`).then((x) => x.json())
-      if (!r.erro) setF((x) => ({ ...x, logradouro: r.logradouro || x.logradouro, bairro: r.bairro || x.bairro, cidade: r.localidade || x.cidade, uf: r.uf || x.uf }))
-      else setErros((e) => ({ ...e, cep: 'CEP não encontrado' }))
-    } catch { /* sem internet: segue manual */ }
+      if (!r.erro) end = { logradouro: r.logradouro, bairro: r.bairro, cidade: r.localidade, uf: r.uf }
+    } catch { /* tenta a reserva */ }
+    if (!end) {
+      try {
+        const r = await fetch(`https://brasilapi.com.br/api/cep/v1/${cep}`)
+        if (r.ok) { const j = await r.json(); end = { logradouro: j.street, bairro: j.neighborhood, cidade: j.city, uf: j.state } }
+      } catch { /* sem internet */ }
+    }
     setBuscandoCep(false)
+    if (!end) { setAvisoCep('CEP não encontrado. Confira o número ou preencha o endereço manualmente.'); return }
+    setF((x) => ({ ...x, logradouro: end.logradouro || x.logradouro, bairro: end.bairro || x.bairro, cidade: end.cidade || x.cidade, uf: end.uf || x.uf }))
+    // CEP genérico de cidade pequena vem sem rua: deixa o cursor na rua; senão vai direto ao número
+    setTimeout(() => (end.logradouro ? numeroRef.current : logradouroRef.current)?.focus(), 0)
   }
 
   const validar = () => {
@@ -85,14 +114,12 @@ const ClienteFicha = forwardRef(function ClienteFicha({ empresaId, onClienteSalv
     else if (!cpfValido(f.documento)) e.documento = 'CPF inválido'
     if (soDigitos(f.celular).length < 10) e.celular = 'Celular com DDD'
     if (!f.origem) e.origem = 'Obrigatório'
-    const temEndereco = [f.cep, f.logradouro, f.numero, f.bairro, f.cidade].some((v) => v.trim())
-    if (temEndereco) {
-      if (soDigitos(f.cep).length !== 8) e.cep = 'CEP com 8 dígitos'
-      if (!f.logradouro.trim()) e.logradouro = 'Obrigatório'
-      if (!f.numero.trim()) e.numero = 'Obrigatório'
-      if (!f.bairro.trim()) e.bairro = 'Obrigatório'
-      if (!f.cidade.trim()) e.cidade = 'Obrigatório'
-    }
+    // Endereço obrigatório
+    if (soDigitos(f.cep).length !== 8) e.cep = 'CEP com 8 dígitos'
+    if (!f.logradouro.trim()) e.logradouro = 'Obrigatório'
+    if (!f.numero.trim()) e.numero = 'Obrigatório'
+    if (!f.bairro.trim()) e.bairro = 'Obrigatório'
+    if (!f.cidade.trim()) e.cidade = 'Obrigatório'
     setErros(e)
     return Object.keys(e).length === 0
   }
@@ -122,8 +149,8 @@ const ClienteFicha = forwardRef(function ClienteFicha({ empresaId, onClienteSalv
         const { data } = await supabase.from('cliente_contatos').insert({ cliente_id: cliente.id, tipo: 'WHATSAPP', valor: cel, principal: true }).select('id').single()
         if (data) setF((x) => ({ ...x, contatoId: data.id }))
       }
-      // endereço (opcional)
-      if (f.logradouro.trim()) {
+      // endereço
+      {
         const end = { cep: soDigitos(f.cep), logradouro: f.logradouro.trim(), numero: f.numero.trim(), complemento: f.complemento.trim() || null, bairro: f.bairro.trim(), cidade: f.cidade.trim(), uf: f.uf }
         if (f.enderecoId) await supabase.from('cliente_enderecos').update(end).eq('id', f.enderecoId)
         else {
@@ -176,11 +203,24 @@ const ClienteFicha = forwardRef(function ClienteFicha({ empresaId, onClienteSalv
       </div>
 
       {erro && <Alert>{erro}</Alert>}
+      {avisoCpf && <Alert tone="ok">{avisoCpf}</Alert>}
 
       {/* Dados obrigatórios */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {campo('nome', 'Nome completo', { wrap: 'sm:col-span-2' }, true)}
-        {campo('documento', 'CPF', { onChange: (e) => setF((x) => ({ ...x, documento: mascaraCPF(e.target.value) })), input: { inputMode: 'numeric', placeholder: '000.000.000-00', className: 'num' } }, true)}
+        <Field label="CPF" required error={erros.documento} hint={buscandoCpf ? 'Procurando cadastro…' : undefined}>
+          {({ id, invalid }) => (
+            <div className="relative">
+              <Input id={id} invalid={invalid} inputMode="numeric" placeholder="000.000.000-00" className="num pr-9" value={f.documento}
+                onChange={(e) => {
+                  const doc = mascaraCPF(e.target.value)
+                  setF((x) => ({ ...x, documento: doc }))
+                  if (soDigitos(doc).length === 11 && soDigitos(doc) !== soDigitos(f.documento)) reconhecerCpf(doc)
+                }} />
+              {buscandoCpf && <Loader2 className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-muted" aria-hidden />}
+            </div>
+          )}
+        </Field>
         {campo('celular', 'Celular / WhatsApp', { onChange: (e) => setF((x) => ({ ...x, celular: mascaraFone(e.target.value) })), input: { inputMode: 'tel', placeholder: '(15) 99999-9999', className: 'num' } }, true)}
         <Field label="Como chegou até a loja" required error={erros.origem}>
           {({ id, invalid }) => (
@@ -193,28 +233,33 @@ const ClienteFicha = forwardRef(function ClienteFicha({ empresaId, onClienteSalv
         {campo('nascimento', 'Data de nascimento', { input: { type: 'date' } })}
       </div>
 
-      {/* Endereço */}
+      {/* Endereço (obrigatório; o CEP preenche o resto) */}
       <div className="flex flex-col gap-4 border-t border-line pt-4">
-        <p className="text-sm font-semibold text-muted">Endereço <span className="font-normal">(opcional · o CEP preenche o resto)</span></p>
+        <p className="text-sm font-semibold text-muted">Endereço <span className="font-normal">· digite o CEP e o endereço é preenchido automaticamente</span></p>
         <div className="grid gap-4 sm:grid-cols-4">
-          <Field label="CEP" error={erros.cep}>
+          <Field label="CEP" required error={erros.cep} hint={buscandoCep ? 'Buscando endereço…' : undefined}>
             {({ id, invalid }) => (
               <div className="relative">
-                <Input id={id} invalid={invalid} inputMode="numeric" className="num" value={f.cep} placeholder="00000-000"
-                  onChange={(e) => setF((x) => ({ ...x, cep: mascaraCEP(e.target.value) }))} onBlur={buscarCep} />
-                {buscandoCep && <Loader2 className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-muted" aria-label="Buscando CEP" />}
+                <Input id={id} invalid={invalid} inputMode="numeric" className="num pr-9" value={f.cep} placeholder="00000-000"
+                  onChange={(e) => {
+                    const cep = mascaraCEP(e.target.value)
+                    setF((x) => ({ ...x, cep }))
+                    if (soDigitos(cep).length === 8 && soDigitos(cep) !== soDigitos(f.cep)) buscarCep(cep)
+                  }} />
+                {buscandoCep && <Loader2 className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-muted" aria-hidden />}
               </div>
             )}
           </Field>
-          {campo('logradouro', 'Rua / avenida', { wrap: 'sm:col-span-2' })}
-          {campo('numero', 'Número')}
-          {campo('complemento', 'Complemento')}
-          {campo('bairro', 'Bairro')}
-          {campo('cidade', 'Cidade')}
-          <Field label="UF">
+          {campo('logradouro', 'Rua / avenida', { wrap: 'sm:col-span-2', input: { ref: logradouroRef } }, true)}
+          {campo('numero', 'Número', { input: { ref: numeroRef, inputMode: 'numeric' } }, true)}
+          {campo('complemento', 'Complemento', { input: { placeholder: 'Apto, bloco, casa…' } })}
+          {campo('bairro', 'Bairro', {}, true)}
+          {campo('cidade', 'Cidade', {}, true)}
+          <Field label="UF" required>
             {({ id }) => <Select id={id} value={f.uf} onChange={set('uf')}>{UFS.map((u) => <option key={u}>{u}</option>)}</Select>}
           </Field>
         </div>
+        {avisoCep && <Alert tone="warn">{avisoCep}</Alert>}
       </div>
     </div>
   )
