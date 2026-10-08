@@ -44,7 +44,7 @@ function itensDaOS(os) {
 function validarOS(os) {
   const e = {}
   if (!os.pacienteEhCliente && !os.paciente) e.paciente = 'Escolha o paciente'
-  if (!os.previsao_entrega) e.previsao_entrega = 'Informe a previsão'
+  if (!os.previsao_entrega) e.previsao_entrega = 'Informe a data de retirada'
   const temErro = ['OD', 'OE'].some((o) => Object.keys(validarOlho(os.receita[o])).length)
   if (temErro) e.receita = 'Corrija os campos destacados na receita.'
   else if (!olhoTemDados(os.receita.OD) && !olhoTemDados(os.receita.OE)) e.receita = 'Preencha a receita de pelo menos um olho.'
@@ -182,7 +182,7 @@ export default function NovaVenda() {
         paciente_id: os.pacienteEhCliente ? null : os.paciente?.id,
         laboratorio_id: os.laboratorio_id || null,
         data_receita: os.data_receita,
-        previsao_entrega: new Date(os.previsao_entrega).toISOString(),
+        previsao_entrega: new Date(`${os.previsao_entrega}T23:59:00`).toISOString(),
         aviso_entrega: os.aviso_entrega,
         iniciais: os.iniciais,
         observacoes: os.observacoes,

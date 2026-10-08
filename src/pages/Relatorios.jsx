@@ -238,7 +238,7 @@ export default function Relatorios() {
                   <div className="overflow-x-auto rounded-md border border-line">
                     <table className="w-full min-w-[560px] text-left text-sm">
                       <thead className="border-b border-line bg-bg text-muted">
-                        <tr><th className="px-3 py-2 font-medium">OS</th><th className="px-3 py-2 font-medium">Cliente</th>{isAdmin && <th className="px-3 py-2 font-medium">Loja</th>}<th className="px-3 py-2 font-medium">Prometida para</th><th className="px-3 py-2 font-medium">Situação</th></tr>
+                        <tr><th className="px-3 py-2 font-medium">OS</th><th className="px-3 py-2 font-medium">Cliente</th>{isAdmin && <th className="px-3 py-2 font-medium">Loja</th>}<th className="px-3 py-2 font-medium">Retirada prometida</th><th className="px-3 py-2 font-medium">Situação</th></tr>
                       </thead>
                       <tbody>
                         {r.os_atrasadas.map((o) => (
@@ -246,7 +246,7 @@ export default function Relatorios() {
                             <td className="px-3 py-2"><Link to={`/vendas/${o.venda_id}`} className="num font-semibold text-brand hover:underline">nº {o.numero}</Link></td>
                             <td className="px-3 py-2">{o.cliente}</td>
                             {isAdmin && <td className="px-3 py-2">{nomeLoja(o.loja)}</td>}
-                            <td className="num px-3 py-2 text-danger">{dataHoraBR(o.previsao_entrega)}</td>
+                            <td className="num px-3 py-2 text-danger">{dataBR(o.previsao_entrega)}</td>
                             <td className="px-3 py-2 text-muted">{STATUS_OS[o.status]}</td>
                           </tr>
                         ))}

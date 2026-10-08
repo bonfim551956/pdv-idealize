@@ -211,7 +211,7 @@ export default function VendaDetalhe() {
             <Button variant="ghost" size="sm" icon={Printer} onClick={() => nav(`/vendas/${venda.id}/imprimir?os=${o.id}`)}>Imprimir</Button>
           </div>}>
           <div className="flex flex-col gap-3">
-            <p className="text-sm text-muted">Paciente <span className="font-medium text-ink">{o.paciente?.nome}</span> · entrega prevista {dataHoraBR(o.previsao_entrega)}</p>
+            <p className="text-sm text-muted">Paciente <span className="font-medium text-ink">{o.paciente?.nome}</span> · retirada em {dataBR(o.previsao_entrega)}</p>
             <Receita receitas={o.receitas} />
           </div>
         </Section>

@@ -1,10 +1,13 @@
 import { useMemo, useState, useEffect } from 'react'
 import { Search, X } from 'lucide-react'
-import { brl, paraDatetimeLocal, somaDias, hojeISO } from '../../lib/format'
+import { brl, somaDias, hojeISO } from '../../lib/format'
 import { olhoVazio } from '../../lib/receita'
 import { Field, Input, Select, Switch, Chips, Section, Button, Textarea, cx } from '../../components/ui'
 import ReceitaGrid from './ReceitaGrid'
 import ClientePicker from './ClientePicker'
+
+export const PRAZO_PADRAO_DIAS = 10
+const dataLocalISO = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 
 export const novaOS = (letra) => ({
   letra,
@@ -12,7 +15,7 @@ export const novaOS = (letra) => ({
   pacienteEhCliente: true,
   paciente: null,
   data_receita: hojeISO(),
-  previsao_entrega: paraDatetimeLocal(somaDias(7)),
+  previsao_entrega: dataLocalISO(somaDias(PRAZO_PADRAO_DIAS)), // retirada: só a data, prazo padrão de 10 dias
   aviso_entrega: 'WHATSAPP',
   laboratorio_id: '',
   iniciais: '',
@@ -181,8 +184,8 @@ export default function OSForm({ os, osA, onChange, cliente, empresaId, lentes, 
             <Field label="Data da receita" required>
               {({ id }) => <Input id={id} type="date" value={os.data_receita} onChange={(e) => set({ data_receita: e.target.value })} />}
             </Field>
-            <Field label="Previsão de entrega" required error={erros.previsao_entrega}>
-              {({ id, invalid }) => <Input id={id} invalid={invalid} type="datetime-local" value={os.previsao_entrega} onChange={(e) => set({ previsao_entrega: e.target.value })} />}
+            <Field label="Data de retirada" required error={erros.previsao_entrega} hint={`Padrão: ${PRAZO_PADRAO_DIAS} dias`}>
+              {({ id, invalid }) => <Input id={id} invalid={invalid} type="date" min={hojeISO()} value={os.previsao_entrega} onChange={(e) => set({ previsao_entrega: e.target.value })} />}
             </Field>
             <Field label="Aviso de entrega">
               {({ id }) => (

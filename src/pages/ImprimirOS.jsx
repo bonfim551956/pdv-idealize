@@ -160,7 +160,7 @@ function ViaLoja({ venda, os }) {
         <Dado rotulo="Consultor">{venda.vendedor.nome}</Dado>
         <Dado rotulo="Paciente">{os.paciente?.nome}</Dado>
         <Dado rotulo="Meio de contato">{venda.campos_extras?.meio_contato}</Dado>
-        <Dado rotulo="Entrega prevista" forte>{dataHoraBR(os.previsao_entrega)}</Dado>
+        <Dado rotulo="Data de retirada" forte>{dataBR(os.previsao_entrega)}</Dado>
         <Dado rotulo="Avisar por">{AVISO[os.aviso_entrega]}</Dado>
       </div>
       <TabelaReceita os={os} />
@@ -205,7 +205,7 @@ function ViaLaboratorio({ venda, os }) {
         <Dado rotulo="Paciente" forte>{os.paciente?.nome}</Dado>
         <Dado rotulo="Receita de">{dia(os.data_receita)}</Dado>
         <Dado rotulo="Laboratório">{os.laboratorio?.nome || 'Não informado'}</Dado>
-        <Dado rotulo="Entregar na loja até" forte>{dataHoraBR(os.previsao_entrega)}</Dado>
+        <Dado rotulo="Entregar na loja até" forte>{dataBR(os.previsao_entrega)}</Dado>
       </div>
       <TabelaReceita os={os} prisma />
       <LenteArmacao os={os} />
@@ -256,8 +256,8 @@ function ViaCliente({ venda, os }) {
           <p className="num text-[12px] font-bold">{dataBR(venda.data_venda)}</p>
         </div>
         <div>
-          <Rotulo>Retirada a partir de</Rotulo>
-          <p className="num text-[12px] font-bold">{dataHoraBR(os.previsao_entrega)}</p>
+          <Rotulo>Data de retirada</Rotulo>
+          <p className="num text-[12px] font-bold">{dataBR(os.previsao_entrega)}</p>
         </div>
       </div>
     </section>
@@ -313,9 +313,9 @@ function ViaLojaVarias({ venda, ordens }) {
       {ordens.map((os) => (
         <div key={os.id} className="flex flex-col gap-[1mm] rounded-[1.5mm] border border-[#D2DEDF] p-[1.5mm]">
           <p className="flex flex-wrap gap-x-3 text-[10px]">
-            <b className="font-display">OS {os.letra} · nº {os.numero}</b>
+            <b className="font-display">Óculos {os.letra} · OS nº {os.numero}</b>
             <span>Paciente <b>{os.paciente?.nome}</b></span>
-            <span className="ml-auto">Entrega <b className="num">{dataHoraBR(os.previsao_entrega)}</b></span>
+            <span className="ml-auto">Retirada <b className="num">{dataBR(os.previsao_entrega)}</b></span>
           </p>
           <TabelaReceita os={os} />
           <LenteArmacao os={os} />
@@ -330,25 +330,32 @@ function ViaLojaVarias({ venda, ordens }) {
   )
 }
 
-function ViaLabCompacta({ venda, os }) {
+function ViaLabVarias({ venda, ordens }) {
+  const pacientes = [...new Set(ordens.map((o) => o.paciente?.nome).filter(Boolean))]
+  const prazo = ordens.map((o) => o.previsao_entrega).sort()[0]
+  const labs = [...new Set(ordens.map((o) => o.laboratorio?.nome).filter(Boolean))]
   return (
     <section className="flex flex-col gap-[1.5mm]">
-      <Cabecalho venda={venda} ordens={[os]} via="Via do laboratório" compacto />
-      <div className="grid grid-cols-[1.6fr_1fr_1fr_1fr] gap-[3mm]">
-        <Dado rotulo="Paciente" forte>{os.paciente?.nome}</Dado>
-        <Dado rotulo="Receita de">{dia(os.data_receita)}</Dado>
-        <Dado rotulo="Laboratório">{os.laboratorio?.nome || 'Não informado'}</Dado>
-        <Dado rotulo="Entregar na loja até" forte>{dataHoraBR(os.previsao_entrega)}</Dado>
+      <Cabecalho venda={venda} ordens={ordens} via="Via do laboratório" compacto />
+      <div className="grid grid-cols-[1.6fr_1fr_1fr] gap-[3mm]">
+        <Dado rotulo={pacientes.length > 1 ? 'Pacientes' : 'Paciente'} forte>{pacientes.join(' · ')}</Dado>
+        <Dado rotulo="Laboratório">{labs.join(' · ') || 'Não informado'}</Dado>
+        <Dado rotulo="Entregar na loja até" forte>{dataBR(prazo)}</Dado>
       </div>
-      <TabelaReceita os={os} prisma />
-      <LenteArmacao os={os} />
-      <div className="grid grid-cols-[1fr_4fr] gap-[3mm]">
-        <Dado rotulo="Iniciais">{os.iniciais}</Dado>
-        <div className="min-w-0">
-          <Rotulo>Observações</Rotulo>
-          <p className="line-clamp-1 text-[10px] leading-snug">{os.observacoes || '—'}</p>
+      {ordens.map((os) => (
+        <div key={os.id} className="flex flex-col gap-[1mm] rounded-[1.5mm] border border-[#D2DEDF] p-[1.5mm]">
+          <p className="flex flex-wrap gap-x-3 text-[10px]">
+            <b className="font-display">Óculos {os.letra} · OS nº {os.numero}</b>
+            {pacientes.length > 1 && <span>Paciente <b>{os.paciente?.nome}</b></span>}
+            <span>Receita de <b className="num">{dia(os.data_receita)}</b></span>
+            {os.iniciais && <span>Iniciais <b>{os.iniciais}</b></span>}
+            <span className="ml-auto">Retirada <b className="num">{dataBR(os.previsao_entrega)}</b></span>
+          </p>
+          <TabelaReceita os={os} prisma />
+          <LenteArmacao os={os} />
+          {os.observacoes && <p className="line-clamp-1 text-[9px]"><b>Obs.:</b> {os.observacoes}</p>}
         </div>
-      </div>
+      ))}
       <div className="mt-[2mm] grid grid-cols-3 gap-[6mm] text-[8px] text-[#4E6468]">
         {['Surfaçagem', 'Montagem', 'Conferência final'].map((t) => (
           <p key={t} className="flex items-end gap-1 border-t border-[#16272B] pt-[0.5mm]">
@@ -388,8 +395,8 @@ function ViaClienteVarias({ venda, ordens }) {
           <p className="num text-[11px] font-bold">{dataBR(venda.data_venda)}</p>
         </div>
         <div>
-          <Rotulo>Retirada a partir de</Rotulo>
-          <p className="num text-[11px] font-bold">{dataHoraBR(retirada)}</p>
+          <Rotulo>Data de retirada</Rotulo>
+          <p className="num text-[11px] font-bold">{dataBR(retirada)}</p>
         </div>
       </div>
     </section>
@@ -401,8 +408,9 @@ function ViaClienteVarias({ venda, ordens }) {
 function folhasPara(ordens, separar) {
   if (ordens.length === 1) return [{ tipo: 'unica', ordens }]
   if (!separar) return [{ tipo: 'consolidada', ordens }]
+  // não coube: loja + cliente numa folha, laboratório (todos os óculos juntos) na seguinte
   const folhas = [{ tipo: 'loja_cliente', ordens }]
-  for (let i = 0; i < ordens.length; i += 3) folhas.push({ tipo: 'labs', ordens: ordens.slice(i, i + 3) })
+  for (let i = 0; i < ordens.length; i += 3) folhas.push({ tipo: 'lab_varias', ordens: ordens.slice(i, i + 3) })
   return folhas
 }
 
@@ -420,7 +428,8 @@ function Folha({ folha, venda, refFolha }) {
       {tipo === 'consolidada' && (
         <>
           <ViaLojaVarias venda={venda} ordens={ordens} />
-          {ordens.map((os) => <div key={os.id}><Recorte /><ViaLabCompacta venda={venda} os={os} /></div>)}
+          <Recorte />
+          <ViaLabVarias venda={venda} ordens={ordens} />
           <div className="mt-auto"><Recorte /><ViaClienteVarias venda={venda} ordens={ordens} /></div>
         </>
       )}
@@ -430,7 +439,7 @@ function Folha({ folha, venda, refFolha }) {
           <div className="mt-auto"><Recorte /><ViaClienteVarias venda={venda} ordens={ordens} /></div>
         </>
       )}
-      {tipo === 'labs' && ordens.map((os, i) => <div key={os.id}>{i > 0 && <Recorte />}<ViaLabCompacta venda={venda} os={os} /></div>)}
+      {tipo === 'lab_varias' && <ViaLabVarias venda={venda} ordens={ordens} />}
     </article>
   )
 }
@@ -506,4 +515,4 @@ export default function ImprimirOS() {
     </div>
   )
 }
-export { ViaLoja, ViaLaboratorio, ViaCliente, ViaLojaVarias, ViaLabCompacta, ViaClienteVarias }
+export { ViaLoja, ViaLaboratorio, ViaCliente, ViaLojaVarias, ViaLabVarias, ViaClienteVarias }

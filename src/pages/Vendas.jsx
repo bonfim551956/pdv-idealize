@@ -224,7 +224,7 @@ export default function Vendas() {
                       </td>
                       <td className="px-4 py-3">
                         <p className="num font-medium">{v.os_numeros.length ? v.os_numeros.map((n) => `nº ${n}`).join(', ') : '—'}</p>
-                        {v.status_os && <p className="text-xs text-muted">{STATUS_OS[v.status_os]}{v.previsao_entrega ? ` · entrega ${dataBR(v.previsao_entrega)}` : ''}</p>}
+                        {v.status_os && <p className="text-xs text-muted">{STATUS_OS[v.status_os]}{v.previsao_entrega ? ` · retirada ${dataBR(v.previsao_entrega)}` : ''}</p>}
                       </td>
                       <td className="px-4 py-3">
                         <p>{v.vendedor}</p>
