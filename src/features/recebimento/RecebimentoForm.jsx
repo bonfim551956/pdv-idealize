@@ -27,7 +27,7 @@ export default function RecebimentoForm({ venda, saldo, caixas, forma, onCancela
   const [data, setData] = useState(hojeISO())
   const [caixaId, setCaixaId] = useState(caixas[0]?.id || '')
   const [modalidade, setModalidade] = useState('CREDITO')
-  const [parcelas, setParcelas] = useState(1)
+  const [parcelas, setParcelas] = useState(forma === 'CARTAO' ? 10 : 1) // padrão Idealize: crédito em 10x sem juros
   const [adquirente, setAdquirente] = useState('')
   const [bandeira, setBandeira] = useState('')
   const [nsu, setNsu] = useState('')
@@ -124,7 +124,7 @@ export default function RecebimentoForm({ venda, saldo, caixas, forma, onCancela
 
       {forma === 'CARTAO' && (
         <div className="flex flex-col gap-4">
-          <Chips label="Modalidade" value={modalidade} onChange={(m) => { if (m) { setModalidade(m); if (m === 'DEBITO') setParcelas(1) } }}
+          <Chips label="Modalidade" value={modalidade} onChange={(m) => { if (m) { setModalidade(m); setParcelas(m === 'DEBITO' ? 1 : 10) } }}
             options={[{ value: 'CREDITO', label: 'Crédito' }, { value: 'DEBITO', label: 'Débito' }]} />
           <div className="grid gap-4 sm:grid-cols-3">
             <Field label="Parcelas">

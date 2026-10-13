@@ -107,7 +107,7 @@ function LenteSelector({ lentes, value, onChange, cor }) {
             <p className="text-xs text-muted num">SKU {value.sku}</p>
           </div>
           <p className={cx('num font-semibold', Number(value.preco) === 0 && 'text-warn')}>
-            {Number(value.preco) === 0 ? 'Sem preço' : `${brl(value.preco)} / un.`}
+            {Number(value.preco) === 0 ? 'Sem preço' : `${brl(value.preco)} / peça · par ${brl(value.preco * 2)} ou 10x ${brl(Math.ceil(value.preco * 2 * 10) / 100)}`}
           </p>
         </div>
       )}

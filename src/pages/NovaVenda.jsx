@@ -552,6 +552,7 @@ export default function NovaVenda() {
                     <div className="mt-2 flex justify-between border-t border-line pt-3"><dt className="text-muted">Subtotal</dt><dd className="num">{brl(totais.bruto)}</dd></div>
                     <div className="flex justify-between"><dt className="text-muted">Desconto</dt><dd className="num">− {brl(totais.desc)}</dd></div>
                     <div className="flex items-baseline justify-between border-t border-line pt-3"><dt className="font-semibold">Total</dt><dd className="num text-xl font-bold">{brl(totais.total)}</dd></div>
+                    {totais.total > 0 && <div className="flex justify-end"><dd className="num text-sm font-semibold text-brand">ou 10x de {brl(Math.ceil((totais.total / 10) * 100) / 100)} sem juros</dd></div>}
                   </dl>
                 </Section>
                 {SEM_COBRANCA.includes(tipo) ? (
