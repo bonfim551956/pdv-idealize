@@ -337,22 +337,22 @@ export default function OSForm({ os, base, onChange, lentes, armacoes, laborator
           {erros.armacao && <p className="text-sm text-danger" role="alert">{erros.armacao}</p>}
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
             {[['mha', 'M.H.A'], ['mva', 'M.V.A'], ['ponte', 'Ponte'], ['dma', 'D.M.A']].map(([k, l]) => (
-              <Field key={k} label={`${l} (mm)`}>
-                {({ id }) => <Input id={id} inputMode="decimal" className="num" value={os.armacao[k]} onChange={(e) => setArm({ [k]: num(e.target.value) })} />}
+              <Field key={k} label={`${l} (mm)`} required={os.armacao.propria} error={os.armacao.propria ? erros[`arm_${k}`] : undefined}>
+                {({ id, invalid }) => <Input id={id} invalid={invalid} inputMode="decimal" className="num" value={os.armacao[k]} onChange={(e) => setArm({ [k]: num(e.target.value) })} />}
               </Field>
             ))}
           </div>
           <div className="grid gap-4 sm:grid-cols-2">
-            <Field label="Tipo de aro">
-              {({ id }) => (
-                <Select id={id} value={os.armacao.tipo} onChange={(e) => setArm({ tipo: e.target.value })}>
+            <Field label="Tipo de aro" required={os.armacao.propria} error={os.armacao.propria ? erros.arm_tipo : undefined}>
+              {({ id, invalid }) => (
+                <Select id={id} invalid={invalid} value={os.armacao.tipo} onChange={(e) => setArm({ tipo: e.target.value })}>
                   <option value="">Selecione</option>
                   {TIPOS_ARO.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
                 </Select>
               )}
             </Field>
-            <Field label="Modelo / desenho">
-              {({ id }) => <Input id={id} value={os.armacao.modelo_desenho} onChange={(e) => setArm({ modelo_desenho: e.target.value })} />}
+            <Field label="Modelo / desenho" required={os.armacao.propria} error={os.armacao.propria ? erros.arm_modelo : undefined}>
+              {({ id, invalid }) => <Input id={id} invalid={invalid} value={os.armacao.modelo_desenho} onChange={(e) => setArm({ modelo_desenho: e.target.value })} />}
             </Field>
           </div>
         </div>

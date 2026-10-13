@@ -68,6 +68,17 @@ function itensDaOS(os) {
 function validarOS(os, tipo) {
   const e = {}
   if (!os.previsao_entrega) e.previsao_entrega = 'Informe a data de retirada'
+  // Armação do cliente: medidas, tipo de aro e modelo/desenho são obrigatórios
+  if (os.armacao.propria) {
+    for (const k of ['mha', 'mva', 'ponte', 'dma']) {
+      const v = parseNum(os.armacao[k])
+      if (v === null) e[`arm_${k}`] = 'Obrigatória'
+      else if (Number.isNaN(v) || v <= 0) e[`arm_${k}`] = 'Medida inválida'
+    }
+    if (!os.armacao.tipo || os.armacao.tipo === 'nenhum') e.arm_tipo = 'Escolha o tipo de aro'
+    if (!String(os.armacao.modelo_desenho || '').trim()) e.arm_modelo = 'Informe o modelo / desenho'
+    if (Object.keys(e).some((k) => k.startsWith('arm_'))) e.armacao = 'Armação do cliente: preencha as medidas, o tipo de aro e o modelo / desenho.'
+  }
   if (tipo === 'SIMPLES') {
     // conserto e garantia de armação: receita, lente e armação são opcionais; se tiver lente, DNP e altura continuam obrigatórias
     for (const o of ['OD', 'OE']) {
