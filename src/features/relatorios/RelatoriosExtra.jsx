@@ -30,47 +30,148 @@ function Medalha({ posicao }) {
   return <span className={cx('grid h-9 w-9 shrink-0 place-items-center rounded-full font-display text-sm font-bold', cor)}>{posicao === 1 ? <Trophy className="h-4 w-4" /> : posicao}</span>
 }
 
+/* Filtros comuns: consultor, tipo de venda e (na comissão) forma de pagamento; e o modo resumido/detalhado */
+function Filtros({ consultores, consultor, setConsultor, tipo, setTipo, formas, forma, setForma, modo, setModo, extra }) {
+  return (
+    <div className="flex flex-wrap items-end gap-4 rounded-lg border border-line bg-surface p-4">
+      <Chips label="Exibir" options={[{ value: 'resumido', label: 'Resumido' }, { value: 'detalhado', label: 'Detalhado' }]} value={modo} onChange={(v) => v && setModo(v)} />
+      <Field label="Consultor" className="w-56">
+        {({ id }) => (
+          <Select id={id} value={consultor} onChange={(e) => setConsultor(e.target.value)}>
+            <option value="">Todos</option>
+            {consultores.map((c) => <option key={c} value={c}>{c}</option>)}
+          </Select>
+        )}
+      </Field>
+      <Field label="Tipo" className="w-48">
+        {({ id }) => (
+          <Select id={id} value={tipo} onChange={(e) => setTipo(e.target.value)}>
+            <option value="">Todos</option>
+            {Object.entries(TIPOS).filter(([k]) => !['GARANTIA', 'CORTESIA', 'ORCAMENTO'].includes(k)).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+          </Select>
+        )}
+      </Field>
+      {formas && (
+        <Field label="Forma de pagamento" className="w-52">
+          {({ id }) => (
+            <Select id={id} value={forma} onChange={(e) => setForma(e.target.value)}>
+              <option value="">Todas</option>
+              {formas.map((f) => <option key={f} value={f}>{nomeForma(f)}</option>)}
+            </Select>
+          )}
+        </Field>
+      )}
+      {extra}
+    </div>
+  )
+}
+
+/* Ranking: tudo o que foi FATURADO no período (vendas confirmadas, sem garantia/cortesia), por consultor */
 function Ranking({ d, isAdmin }) {
-  const lider = d.ranking[0]
-  const total = d.ranking.reduce((s, c) => s + n(c.total), 0)
+  const [modo, setModo] = useState('resumido')
+  const [consultor, setConsultor] = useState('')
+  const [tipo, setTipo] = useState('')
+  const faturadas = d.detalhado.filter((v) => v.status === 'confirmada' && !['GARANTIA', 'CORTESIA', 'ORCAMENTO'].includes(v.tipo))
+  const consultores = [...new Set(faturadas.map((v) => v.consultor))].sort()
+  const vendas = faturadas.filter((v) => (!consultor || v.consultor === consultor) && (!tipo || v.tipo === tipo))
+  const grupos = Object.values(vendas.reduce((acc, v) => {
+    const g = acc[v.consultor] || (acc[v.consultor] = { consultor: v.consultor, loja: v.loja, vendas: [], total: 0, bruto: 0, desconto: 0, recebido: 0 })
+    g.vendas.push(v); g.total += n(v.total); g.bruto += n(v.bruto); g.desconto += n(v.desconto); g.recebido += n(v.recebido)
+    return acc
+  }, {})).sort((a, b) => b.total - a.total).map((g, i) => ({ ...g, posicao: i + 1, ticket: g.vendas.length ? g.total / g.vendas.length : 0 }))
+  const total = grupos.reduce((t, g) => t + g.total, 0)
+  const lider = grupos[0]
+
+  const exportar = () => {
+    if (modo === 'resumido') {
+      baixarCsv('ranking-resumido.csv', [['Posição', 'Consultor', 'Loja', 'Vendas', 'Faturado', 'Ticket médio', 'Desconto', 'Recebido', 'Participação %'],
+        ...grupos.map((g) => [g.posicao, g.consultor, nomeLoja(g.loja), g.vendas.length, g.total, Math.round(g.ticket * 100) / 100, g.desconto, g.recebido, Math.round((g.total / (total || 1)) * 1000) / 10])])
+    } else {
+      baixarCsv('ranking-detalhado.csv', [['Consultor', 'Data', 'Venda', 'OS', 'Loja', 'Cliente', 'Tipo', 'Bruto', 'Desconto', 'Faturado', 'Recebido', 'Saldo'],
+        ...grupos.flatMap((g) => g.vendas.map((v) => [g.consultor, dataHoraBR(v.data_venda), v.numero, v.os, nomeLoja(v.loja), v.cliente, TIPOS[v.tipo] || v.tipo, n(v.bruto), n(v.desconto), n(v.total), n(v.recebido), Math.max(n(v.total) - n(v.recebido), 0)]))])
+    }
+  }
+
   return (
     <>
-      <Section title="Ranking de consultores">
-        {d.ranking.length === 0 ? <p className="text-sm text-muted">Sem vendas no período.</p> : (
+      <Filtros consultores={consultores} consultor={consultor} setConsultor={setConsultor} tipo={tipo} setTipo={setTipo} modo={modo} setModo={setModo} />
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <Kpi rotulo="Faturado no período" valor={brl(total)} cor="text-brand" sub={`${vendas.length} venda${vendas.length === 1 ? '' : 's'}`} />
+        <Kpi rotulo="Ticket médio" valor={brl(vendas.length ? total / vendas.length : 0)} />
+        <Kpi rotulo="Descontos" valor={brl(grupos.reduce((t, g) => t + g.desconto, 0))} />
+        <Kpi rotulo="Já recebido dessas vendas" valor={brl(grupos.reduce((t, g) => t + g.recebido, 0))} cor="text-ok" />
+      </div>
+      <Section title={modo === 'resumido' ? 'Ranking de consultores — faturado' : 'Ranking detalhado — vendas faturadas'} aside={<Button variant="secondary" size="sm" icon={Download} onClick={exportar}>Exportar</Button>}>
+        {grupos.length === 0 ? <p className="text-sm text-muted">Nenhuma venda faturada com esses filtros.</p> : modo === 'resumido' ? (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[760px] text-left text-sm">
+            <table className="w-full min-w-[720px] text-left text-sm">
               <thead className="border-b border-line text-muted">
                 <tr>
                   <th className="py-2 pr-3 font-medium">#</th><th className="py-2 pr-3 font-medium">Consultor</th>
-                  <th className="py-2 pr-3 text-right font-medium">Vendas</th><th className="py-2 pr-3 text-right font-medium">Faturamento</th>
-                  <th className="py-2 pr-3 text-right font-medium">Ticket médio</th><th className="py-2 pr-3 text-right font-medium">Lentes</th>
-                  <th className="py-2 pr-3 text-right font-medium">Armações</th><th className="py-2 pr-3 text-right font-medium">Desconto</th>
-                  <th className="py-2 text-right font-medium">Part.</th>
+                  <th className="py-2 pr-3 text-right font-medium">Vendas</th><th className="py-2 pr-3 text-right font-medium">Faturado</th>
+                  <th className="py-2 pr-3 text-right font-medium">Ticket médio</th><th className="py-2 pr-3 text-right font-medium">Desconto</th>
+                  <th className="py-2 pr-3 text-right font-medium">Recebido</th><th className="py-2 text-right font-medium">Part.</th>
                 </tr>
               </thead>
               <tbody>
-                {d.ranking.map((c) => (
-                  <tr key={c.vendedor_id} className="border-b border-line last:border-0">
-                    <td className="py-2 pr-3"><Medalha posicao={c.posicao} /></td>
+                {grupos.map((g) => (
+                  <tr key={g.consultor} className="border-b border-line last:border-0">
+                    <td className="py-2 pr-3"><Medalha posicao={g.posicao} /></td>
                     <td className="py-2 pr-3">
-                      <p className="font-semibold">{c.consultor}</p>
-                      <p className="text-xs text-muted">{isAdmin && `${nomeLoja(c.loja)} · `}{c.garantias > 0 && `${c.garantias} garantia/cortesia · `}{c.canceladas > 0 && `${c.canceladas} cancelada(s) · `}{lider && c.posicao > 1 ? `${brl(n(lider.total) - n(c.total))} atrás do 1º` : 'Líder do período'}</p>
+                      <p className="font-semibold">{g.consultor}</p>
+                      <p className="text-xs text-muted">{isAdmin && `${nomeLoja(g.loja)} · `}{g.posicao > 1 ? `${brl(lider.total - g.total)} atrás do 1º` : 'Líder do período'}</p>
                     </td>
-                    <td className="num py-2 pr-3 text-right">{c.vendas}</td>
-                    <td className="num py-2 pr-3 text-right font-semibold">{brl(c.total)}</td>
-                    <td className="num py-2 pr-3 text-right">{brl(c.ticket)}</td>
-                    <td className="num py-2 pr-3 text-right">{n(c.lentes)}</td>
-                    <td className="num py-2 pr-3 text-right">{n(c.armacoes)}</td>
-                    <td className="num py-2 pr-3 text-right">{pct(n(c.desconto), n(c.bruto))}</td>
-                    <td className="num py-2 text-right text-muted">{pct(n(c.total), total)}</td>
+                    <td className="num py-2 pr-3 text-right">{g.vendas.length}</td>
+                    <td className="num py-2 pr-3 text-right font-semibold">{brl(g.total)}</td>
+                    <td className="num py-2 pr-3 text-right">{brl(g.ticket)}</td>
+                    <td className="num py-2 pr-3 text-right">{g.desconto > 0 ? brl(g.desconto) : '—'}</td>
+                    <td className="num py-2 pr-3 text-right">{brl(g.recebido)}</td>
+                    <td className="num py-2 text-right text-muted">{pct(g.total, total)}</td>
                   </tr>
                 ))}
+                <tr><td /><td className="pt-3 font-semibold">Total</td><td className="num pt-3 text-right">{vendas.length}</td><td className="num pt-3 text-right font-bold text-brand">{brl(total)}</td><td colSpan={4} /></tr>
               </tbody>
             </table>
           </div>
+        ) : (
+          <div className="flex flex-col gap-6">
+            {grupos.map((g) => (
+              <div key={g.consultor} className="flex flex-col gap-2">
+                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-line pb-2">
+                  <span className="flex items-center gap-2"><Medalha posicao={g.posicao} /><b>{g.consultor}</b>{isAdmin && <span className="text-xs text-muted">{nomeLoja(g.loja)}</span>}</span>
+                  <span className="num text-sm">{g.vendas.length} vendas · <b className="text-brand">{brl(g.total)}</b></span>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full min-w-[720px] text-left text-sm">
+                    <thead className="text-muted"><tr>
+                      <th className="py-1 pr-3 font-medium">Data</th><th className="py-1 pr-3 font-medium">OS</th><th className="py-1 pr-3 font-medium">Cliente</th><th className="py-1 pr-3 font-medium">Tipo</th>
+                      <th className="py-1 pr-3 text-right font-medium">Desconto</th><th className="py-1 pr-3 text-right font-medium">Faturado</th><th className="py-1 pr-3 text-right font-medium">Recebido</th><th className="py-1 text-right font-medium">Saldo</th>
+                    </tr></thead>
+                    <tbody>
+                      {g.vendas.map((v) => {
+                        const saldo = Math.max(n(v.total) - n(v.recebido), 0)
+                        return (
+                          <tr key={v.id} className="border-t border-line">
+                            <td className="num py-1 pr-3 whitespace-nowrap">{dataHoraBR(v.data_venda)}</td>
+                            <td className="num py-1 pr-3"><Link to={`/vendas/${v.id}`} className="font-semibold text-brand hover:underline">{v.os || `Venda ${v.numero}`}</Link></td>
+                            <td className="py-1 pr-3">{v.cliente}</td>
+                            <td className="py-1 pr-3">{TIPOS[v.tipo] || v.tipo}</td>
+                            <td className="num py-1 pr-3 text-right">{n(v.desconto) > 0 ? brl(v.desconto) : '—'}</td>
+                            <td className="num py-1 pr-3 text-right font-semibold">{brl(v.total)}</td>
+                            <td className="num py-1 pr-3 text-right">{brl(v.recebido)}</td>
+                            <td className="num py-1 text-right">{saldo > 0 ? <span className="rounded bg-danger px-2 py-0.5 font-bold text-surface">{brl(saldo)}</span> : '—'}</td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            ))}
+          </div>
         )}
       </Section>
-      {isAdmin && (
+      {isAdmin && modo === 'resumido' && !consultor && !tipo && (
         <Section title="Ranking de lojas">
           <Barras itens={d.ranking_lojas} rotulo={(l) => nomeLoja(l.loja)} valor={(l) => l.total}
             detalhe={(l) => `${brl(l.total)} · ${l.vendas} vendas · ticket ${brl(l.ticket)} ·`} />
@@ -80,63 +181,108 @@ function Ranking({ d, isAdmin }) {
   )
 }
 
-function Comissionado({ d, isAdmin }) {
+/* Comissão: tudo o que foi RECEBIDO no período (pela data do recebimento), por consultor */
+function Comissionado({ recs, isAdmin }) {
   const pref = lerPref()
-  const [base, setBase] = useState(pref.base || 'vendido')
+  const [modo, setModo] = useState('resumido')
+  const [consultor, setConsultor] = useState('')
+  const [tipo, setTipo] = useState('')
+  const [forma, setForma] = useState('')
   const [taxa, setTaxa] = useState(pref.taxa ?? '2')
   const [taxas, setTaxas] = useState(pref.taxas || {})
-  useEffect(() => { gravarPref({ base, taxa, taxas }) }, [base, taxa, taxas])
+  useEffect(() => { gravarPref({ ...lerPref(), taxa, taxas }) }, [taxa, taxas])
+  const pctDe = (nome) => Number(String(taxas[nome] ?? taxa).replace(',', '.')) || 0
 
-  const linhas = d.ranking.map((c) => {
-    const t = Number(String(taxas[c.vendedor_id] ?? taxa).replace(',', '.')) || 0
-    const valorBase = base === 'recebido' ? n(c.recebido) : n(c.total)
-    return { ...c, t, valorBase, comissao: Math.round(valorBase * t) / 100 }
-  })
-  const total = linhas.reduce((s, l) => s + l.comissao, 0)
+  const consultores = [...new Set(recs.map((r) => r.consultor))].sort()
+  const formas = [...new Set(recs.map((r) => r.forma))].sort()
+  const lista = recs.filter((r) => (!consultor || r.consultor === consultor) && (!tipo || r.tipo === tipo) && (!forma || r.forma === forma))
+    .map((r) => ({ ...r, comissao: Math.round(n(r.valor) * pctDe(r.consultor)) / 100 }))
+  const grupos = Object.values(lista.reduce((acc, r) => {
+    const g = acc[r.consultor] || (acc[r.consultor] = { consultor: r.consultor, loja: r.loja, itens: [], recebido: 0, comissao: 0, saldos: 0 })
+    g.itens.push(r); g.recebido += n(r.valor); g.comissao += r.comissao; if (r.saldo_posterior) g.saldos += n(r.valor)
+    return acc
+  }, {})).sort((a, b) => b.recebido - a.recebido)
+  const totRec = grupos.reduce((t, g) => t + g.recebido, 0)
+  const totCom = grupos.reduce((t, g) => t + g.comissao, 0)
 
   const exportar = () => {
-    const cab = ['Consultor', 'Loja', 'Vendas', 'Faturamento', 'Recebido', 'Desconto', 'Base', '% comissão', 'Comissão']
-    const lin = linhas.map((l) => [l.consultor, nomeLoja(l.loja), l.vendas, l.total, l.recebido, l.desconto, l.valorBase, l.t, l.comissao])
-    baixarCsv('comissao.csv', [cab, ...lin])
+    if (modo === 'resumido') baixarCsv('comissao-resumido.csv', [['Consultor', 'Loja', 'Recebimentos', 'Recebido', 'Dos quais saldos de vendas anteriores', '% comissão', 'Comissão'],
+      ...grupos.map((g) => [g.consultor, nomeLoja(g.loja), g.itens.length, g.recebido, g.saldos, pctDe(g.consultor), Math.round(g.comissao * 100) / 100])])
+    else baixarCsv('comissao-detalhado.csv', [['Consultor', 'Recebido em', 'Venda', 'OS', 'Data da venda', 'Loja', 'Cliente', 'Tipo', 'Forma', 'Parcelas', 'Valor recebido', '% comissão', 'Comissão'],
+      ...lista.map((r) => [r.consultor, dataHoraBR(r.recebido_em), r.numero, r.os, dataHoraBR(r.data_venda), nomeLoja(r.loja), r.cliente, TIPOS[r.tipo] || r.tipo, nomeForma(r.forma), r.parcelas || '', n(r.valor), pctDe(r.consultor), r.comissao])])
   }
 
   return (
-    <Section title="Comissão por consultor" aside={<Button variant="secondary" size="sm" icon={Download} onClick={exportar}>Exportar</Button>}>
-      <div className="mb-4 flex flex-wrap items-end gap-4">
-        <Chips label="Calcular sobre" options={[{ value: 'vendido', label: 'Valor vendido' }, { value: 'recebido', label: 'Valor recebido' }]} value={base} onChange={(v) => v && setBase(v)} />
-        <Field label="% padrão" className="w-28">{({ id }) => <Input id={id} inputMode="decimal" value={taxa} onChange={(e) => setTaxa(e.target.value.replace(/[^\d,.]/g, ''))} />}</Field>
-        <p className="max-w-sm text-xs text-muted">Garantia e cortesia não entram. A % pode ser ajustada por consultor e fica salva neste computador.</p>
+    <>
+      <Filtros consultores={consultores} consultor={consultor} setConsultor={setConsultor} tipo={tipo} setTipo={setTipo}
+        formas={formas} forma={forma} setForma={setForma} modo={modo} setModo={setModo}
+        extra={<Field label="% padrão" className="w-24">{({ id }) => <Input id={id} inputMode="decimal" value={taxa} onChange={(e) => setTaxa(e.target.value.replace(/[^\d,.]/g, ''))} />}</Field>} />
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <Kpi rotulo="Recebido no período" valor={brl(totRec)} cor="text-ok" sub={`${lista.length} recebimento${lista.length === 1 ? '' : 's'}`} />
+        <Kpi rotulo="Saldos de vendas anteriores" valor={brl(grupos.reduce((t, g) => t + g.saldos, 0))} sub="pagos neste período" />
+        <Kpi rotulo="Comissões" valor={brl(totCom)} cor="text-brand" />
+        <Kpi rotulo="Consultores" valor={grupos.length} />
       </div>
-      {linhas.length === 0 ? <p className="text-sm text-muted">Sem vendas no período.</p> : (
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[720px] text-left text-sm">
-            <thead className="border-b border-line text-muted">
-              <tr>
-                <th className="py-2 pr-3 font-medium">Consultor</th><th className="py-2 pr-3 text-right font-medium">Vendas</th>
-                <th className="py-2 pr-3 text-right font-medium">Vendido</th><th className="py-2 pr-3 text-right font-medium">Recebido</th>
-                <th className="py-2 pr-3 text-right font-medium">%</th><th className="py-2 text-right font-medium">Comissão</th>
-              </tr>
-            </thead>
-            <tbody>
-              {linhas.map((l) => (
-                <tr key={l.vendedor_id} className="border-b border-line last:border-0">
-                  <td className="py-2 pr-3"><p className="font-semibold">{l.consultor}</p>{isAdmin && <p className="text-xs text-muted">{nomeLoja(l.loja)}</p>}</td>
-                  <td className="num py-2 pr-3 text-right">{l.vendas}</td>
-                  <td className={cx('num py-2 pr-3 text-right', base === 'vendido' && 'font-semibold')}>{brl(l.total)}</td>
-                  <td className={cx('num py-2 pr-3 text-right', base === 'recebido' && 'font-semibold')}>{brl(l.recebido)}</td>
-                  <td className="py-2 pr-3 text-right">
-                    <input aria-label={`% de ${l.consultor}`} inputMode="decimal" className="num h-8 w-16 rounded-md border border-line bg-surface px-2 text-right focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20"
-                      value={taxas[l.vendedor_id] ?? taxa} onChange={(e) => setTaxas((x) => ({ ...x, [l.vendedor_id]: e.target.value.replace(/[^\d,.]/g, '') }))} />
-                  </td>
-                  <td className="num py-2 text-right font-bold text-brand">{brl(l.comissao)}</td>
+      <Section title={modo === 'resumido' ? 'Comissão por consultor — sobre o recebido' : 'Comissão detalhada — cada recebimento'} aside={<Button variant="secondary" size="sm" icon={Download} onClick={exportar}>Exportar</Button>}>
+        <p className="mb-3 text-xs text-muted">Conta pela data em que o dinheiro entrou: o saldo pago na retirada entra na comissão do mês em que foi recebido. Garantia e cortesia não têm recebimento. A % por consultor fica salva neste computador.</p>
+        {grupos.length === 0 ? <p className="text-sm text-muted">Nenhum recebimento com esses filtros.</p> : modo === 'resumido' ? (
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[720px] text-left text-sm">
+              <thead className="border-b border-line text-muted">
+                <tr>
+                  <th className="py-2 pr-3 font-medium">Consultor</th><th className="py-2 pr-3 text-right font-medium">Recebimentos</th>
+                  <th className="py-2 pr-3 text-right font-medium">Recebido</th><th className="py-2 pr-3 text-right font-medium">Saldos anteriores</th>
+                  <th className="py-2 pr-3 text-right font-medium">%</th><th className="py-2 text-right font-medium">Comissão</th>
                 </tr>
-              ))}
-              <tr><td className="pt-3 font-semibold" colSpan={5}>Total de comissões</td><td className="num pt-3 text-right font-bold text-brand">{brl(total)}</td></tr>
-            </tbody>
-          </table>
-        </div>
-      )}
-    </Section>
+              </thead>
+              <tbody>
+                {grupos.map((g) => (
+                  <tr key={g.consultor} className="border-b border-line last:border-0">
+                    <td className="py-2 pr-3"><p className="font-semibold">{g.consultor}</p>{isAdmin && <p className="text-xs text-muted">{nomeLoja(g.loja)}</p>}</td>
+                    <td className="num py-2 pr-3 text-right">{g.itens.length}</td>
+                    <td className="num py-2 pr-3 text-right font-semibold">{brl(g.recebido)}</td>
+                    <td className="num py-2 pr-3 text-right text-muted">{g.saldos > 0 ? brl(g.saldos) : '—'}</td>
+                    <td className="py-2 pr-3 text-right">
+                      <input aria-label={`% de ${g.consultor}`} inputMode="decimal" className="num h-8 w-16 rounded-md border border-line bg-surface px-2 text-right focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20"
+                        value={taxas[g.consultor] ?? taxa} onChange={(e) => setTaxas((x) => ({ ...x, [g.consultor]: e.target.value.replace(/[^\d,.]/g, '') }))} />
+                    </td>
+                    <td className="num py-2 text-right font-bold text-brand">{brl(g.comissao)}</td>
+                  </tr>
+                ))}
+                <tr><td className="pt-3 font-semibold">Total</td><td className="num pt-3 text-right">{lista.length}</td><td className="num pt-3 text-right font-bold">{brl(totRec)}</td><td colSpan={2} /><td className="num pt-3 text-right font-bold text-brand">{brl(totCom)}</td></tr>
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[960px] text-left text-sm">
+              <thead className="border-b border-line text-muted">
+                <tr>
+                  <th className="py-2 pr-3 font-medium">Recebido em</th><th className="py-2 pr-3 font-medium">Consultor</th><th className="py-2 pr-3 font-medium">OS</th>
+                  <th className="py-2 pr-3 font-medium">Cliente</th><th className="py-2 pr-3 font-medium">Venda em</th><th className="py-2 pr-3 font-medium">Forma</th>
+                  <th className="py-2 pr-3 text-right font-medium">Valor</th><th className="py-2 text-right font-medium">Comissão</th>
+                </tr>
+              </thead>
+              <tbody>
+                {lista.map((r) => (
+                  <tr key={r.id} className="border-b border-line last:border-0">
+                    <td className="num whitespace-nowrap py-2 pr-3">{dataHoraBR(r.recebido_em)}</td>
+                    <td className="py-2 pr-3">{r.consultor}</td>
+                    <td className="num py-2 pr-3"><Link to={`/vendas/${r.venda_id}`} className="font-semibold text-brand hover:underline">{r.os || `Venda ${r.numero}`}</Link></td>
+                    <td className="py-2 pr-3">{r.cliente}</td>
+                    <td className="num py-2 pr-3">{dataHoraBR(r.data_venda).slice(0, 10)}{r.saldo_posterior && <span className="ml-1 rounded bg-accent/20 px-1.5 text-xs">saldo</span>}</td>
+                    <td className="py-2 pr-3">{nomeForma(r.forma)}{r.parcelas > 1 ? ` ${r.parcelas}x` : ''}</td>
+                    <td className="num py-2 pr-3 text-right font-semibold">{brl(r.valor)}</td>
+                    <td className="num py-2 text-right text-brand">{brl(r.comissao)}</td>
+                  </tr>
+                ))}
+                <tr><td className="pt-3 font-semibold" colSpan={6}>Total</td><td className="num pt-3 text-right font-bold">{brl(totRec)}</td><td className="num pt-3 text-right font-bold text-brand">{brl(totCom)}</td></tr>
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Section>
+    </>
   )
 }
 
@@ -268,22 +414,25 @@ function Detalhado({ d, isAdmin }) {
 export default function RelatoriosExtra({ visao, ini, fim, loja, isAdmin }) {
   const [d, setD] = useState(null)
   const [erro, setErro] = useState(null)
+  const [recs, setRecs] = useState(null)
   useEffect(() => {
     let ativo = true
-    setD(null)
-    supabase.rpc('relatorio_extra', { p_ini: ini.toISOString(), p_fim: fim.toISOString(), p_loja: loja || null }).then(({ data, error }) => {
+    setD(null); setRecs(null)
+    const args = { p_ini: ini.toISOString(), p_fim: fim.toISOString(), p_loja: loja || null }
+    Promise.all([supabase.rpc('relatorio_extra', args), supabase.rpc('relatorio_recebimentos', args)]).then(([a, b]) => {
       if (!ativo) return
-      if (error) { setErro(mensagemErro(error)); setD({}); return }
-      setErro(null); setD(data)
+      const error = a.error || b.error
+      if (error) { setErro(mensagemErro(error)); setD({}); setRecs([]); return }
+      setErro(null); setD(a.data); setRecs(b.data || [])
     })
     return () => { ativo = false }
   }, [ini.getTime(), fim.getTime(), loja]) // eslint-disable-line react-hooks/exhaustive-deps
 
   if (erro) return <Alert>{erro}</Alert>
-  if (!d) return <Spinner label="Calculando relatório" />
+  if (!d || !recs) return <Spinner label="Calculando relatório" />
+  if (visao === 'comissionado') return <Comissionado recs={recs} isAdmin={isAdmin} />
   if (!d.detalhado?.length) return <Empty title="Nenhum registro nesse período">Escolha outro período para ver os números.</Empty>
   if (visao === 'ranking') return <Ranking d={d} isAdmin={isAdmin} />
-  if (visao === 'comissionado') return <Comissionado d={d} isAdmin={isAdmin} />
   if (visao === 'analitico') return <Analitico d={d} />
   return <Detalhado d={d} isAdmin={isAdmin} />
 }
