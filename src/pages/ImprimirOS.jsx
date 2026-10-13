@@ -209,8 +209,7 @@ function ViaLaboratorio({ venda, os }) {
       </div>
       <TabelaReceita os={os} prisma />
       <LenteArmacao os={os} />
-      <div className="grid grid-cols-[1fr_4fr] gap-[3mm]">
-        <Dado rotulo="Iniciais">{os.iniciais}</Dado>
+      <div>
         <div className="min-w-0">
           <Rotulo>Observações</Rotulo>
           <p className="line-clamp-2 whitespace-pre-wrap text-[10px] leading-snug">{os.observacoes || '—'}</p>
@@ -348,7 +347,6 @@ function ViaLabVarias({ venda, ordens }) {
             <b className="font-display">OS {os.numero}-{os.letra} · Óculos {os.oculos}</b>
             {pacientes.length > 1 && <span>Paciente <b>{os.paciente?.nome}</b></span>}
             <span>Receita de <b className="num">{dia(os.data_receita)}</b></span>
-            {os.iniciais && <span>Iniciais <b>{os.iniciais}</b></span>}
             <span className="ml-auto">Retirada <b className="num">{dataBR(os.previsao_entrega)}</b></span>
           </p>
           <TabelaReceita os={os} prisma />

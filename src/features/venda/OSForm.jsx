@@ -267,10 +267,7 @@ export default function OSForm({ os, base, onChange, lentes, armacoes, laborator
       </Section>
 
       <Section title="Para o laboratório">
-        <div className="grid gap-4 sm:grid-cols-[200px_1fr]">
-          <Field label="Iniciais na lente" hint="Opcional">
-            {({ id }) => <Input id={id} maxLength={6} value={os.iniciais} onChange={(e) => set({ iniciais: e.target.value.toUpperCase() })} />}
-          </Field>
+        <div className="grid gap-4">
           <Field label="Observações da OS">
             {({ id }) => <Textarea id={id} value={os.observacoes} onChange={(e) => set({ observacoes: e.target.value })} placeholder="Ex.: cliente prefere lente mais fina, conferir centro óptico" />}
           </Field>

@@ -20,7 +20,8 @@ const CARTEIRAS = ['PicPay', 'Mercado Pago', 'Apple Pay', 'Google Pay', 'Outra']
 
 const brlInput = (n) => Number(n || 0).toFixed(2).replace('.', ',')
 
-export default function RecebimentoForm({ venda, saldo, caixas, forma, onCancelar, onSalvo }) {
+export default function RecebimentoForm({ venda, saldo, caixas, forma, onCancelar, onSalvo, clientes = [] }) {
+  const [pagador, setPagador] = useState(clientes[0]?.id || '')
   const toast = useToast()
   const [valor, setValor] = useState(brlInput(saldo))
   const [data, setData] = useState(hojeISO())
@@ -74,6 +75,7 @@ export default function RecebimentoForm({ venda, saldo, caixas, forma, onCancela
     const { error } = await supabase.rpc('registrar_recebimento', {
       p: {
         venda_id: venda.id,
+        pagador_id: pagador || null,
         caixa_id: caixaId,
         forma,
         valor: v,
@@ -102,6 +104,15 @@ export default function RecebimentoForm({ venda, saldo, caixas, forma, onCancela
         <Field label="Data de entrada">
           {({ id }) => <Input id={id} type="date" value={data} onChange={(e) => setData(e.target.value)} />}
         </Field>
+        {clientes.length > 1 && (
+          <Field label="Pago por" required hint="Define em qual CPF sai a nota" className="sm:col-span-3 sm:max-w-md">
+            {({ id }) => (
+              <Select id={id} value={pagador} onChange={(e) => setPagador(e.target.value)}>
+                {clientes.map((c, i) => <option key={c.id} value={c.id}>{c.nome}{i === 0 ? ' (principal)' : ''}</option>)}
+              </Select>
+            )}
+          </Field>
+        )}
         <Field label="Caixa" required>
           {({ id }) => (
             <Select id={id} value={caixaId} onChange={(e) => setCaixaId(e.target.value)}>

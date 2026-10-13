@@ -55,7 +55,7 @@ export default function VendaDetalhe() {
         id, numero, status, tipo, data_venda, observacoes, campos_extras, loja_id, total_bruto, total_desconto, total_liquido,
         cliente:clientes(id, nome, documento), vendedor:colaboradores!vendas_vendedor_id_fkey(nome), loja:lojas(nome),
         itens:itens_venda(id, sku, descricao, olho, quantidade, preco_unitario, desconto, total, os_id),
-        ordens:ordens_servico(id, numero, letra, oculos, status, previsao_entrega, paciente:clientes(nome),
+        ordens:ordens_servico(id, numero, letra, oculos, status, previsao_entrega, paciente_id, paciente:clientes(id, nome, documento),
           receitas(olho, esferico_longe, cilindrico, eixo, adicao, esferico_perto))
       `).eq('id', id).single(),
       supabase.from('v_venda_resumo').select('*').eq('venda_id', id).single(),
@@ -85,6 +85,17 @@ export default function VendaDetalhe() {
 
   const saldo = Number(resumo.a_receber)
   const podeReceber = venda.status === 'confirmada' && saldo > 0
+  // Clientes da venda: principal + quem veio junto (OS B, C…). Base para a nota no CPF de cada um.
+  const clientesVenda = [venda.cliente, ...venda.ordens.map((o) => o.paciente).filter(Boolean)]
+    .filter((c, i, arr) => c && arr.findIndex((x) => x.id === c.id) === i)
+  const pacienteDaOS = Object.fromEntries(venda.ordens.map((o) => [o.id, o.paciente_id]))
+  const porCliente = clientesVenda.map((c) => {
+    const itensC = venda.itens.filter((i) => (i.os_id ? pacienteDaOS[i.os_id] : venda.cliente.id) === c.id)
+    const total = itensC.reduce((t, i) => t + Number(i.total), 0)
+    const pago = receb.filter((r) => r.status === 'ativo' && (r.pagador_id || venda.cliente.id) === c.id).reduce((t, r) => t + Number(r.valor), 0)
+    return { ...c, total, pago }
+  })
+  const nomeDe = (id) => clientesVenda.find((c) => c.id === id)?.nome
 
   return (
     <div className="mx-auto flex max-w-6xl flex-col gap-6">
@@ -145,7 +156,7 @@ export default function VendaDetalhe() {
               {caixas.length === 0 ? (
                 <Alert>Não há caixa aberto nesta loja. Abra um caixa para registrar recebimentos.</Alert>
               ) : (
-                <RecebimentoForm key={forma} venda={venda} saldo={saldo} caixas={caixas} forma={forma}
+                <RecebimentoForm key={forma} venda={venda} saldo={saldo} caixas={caixas} forma={forma} clientes={clientesVenda}
                   onCancelar={() => setForma(null)} onSalvo={() => { setForma(null); carregar() }} />
               )}
             </div>
@@ -157,6 +168,32 @@ export default function VendaDetalhe() {
       )}
 
       <div className="grid gap-6 lg:grid-cols-2">
+        {clientesVenda.length > 1 && (
+          <Section title="Por cliente" aside={<span className="text-xs text-muted">base da nota fiscal de cada CPF</span>} className="lg:col-span-2">
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[480px] text-left text-sm">
+                <thead className="border-b border-line text-muted">
+                  <tr><th className="py-2 pr-3 font-medium">Cliente</th><th className="py-2 pr-3 text-right font-medium">Produtos</th><th className="py-2 pr-3 text-right font-medium">Pago por ele</th><th className="py-2 text-right font-medium">Diferença</th></tr>
+                </thead>
+                <tbody>
+                  {porCliente.map((c, i) => {
+                    const dif = c.total - c.pago
+                    return (
+                      <tr key={c.id} className="border-b border-line last:border-0">
+                        <td className="py-2 pr-3"><p className="font-medium">{c.nome}</p><p className="text-xs text-muted">{i === 0 ? 'Principal · ' : 'Vinculado · '}{c.documento ? `CPF ${c.documento.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4')}` : 'sem CPF'}</p></td>
+                        <td className="num py-2 pr-3 text-right">{brl(c.total)}</td>
+                        <td className="num py-2 pr-3 text-right">{brl(c.pago)}</td>
+                        <td className={cx('num py-2 text-right font-semibold', Math.abs(dif) < 0.005 ? 'text-ok' : 'text-warn')}>{Math.abs(dif) < 0.005 ? 'Confere' : brl(dif)}</td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+            <p className="mt-2 text-xs text-muted">Quando cada um paga a própria parte, a diferença zera e cada nota sai no CPF certo. Se um pagar pelo outro, a diferença mostra o valor a acertar.</p>
+          </Section>
+        )}
+
         <Section title="Recebimentos">
           {receb.length === 0 ? (
             <p className="text-sm text-muted">Nenhum recebimento registrado.</p>
@@ -169,6 +206,7 @@ export default function VendaDetalhe() {
                       {FORMAS[r.forma]}
                       {r.forma === 'CARTAO' && ` ${r.modalidade === 'DEBITO' ? 'débito' : `crédito ${r.parcelas}x`}`}
                       {r.status === 'estornado' && ' · estornado'}
+                      {clientesVenda.length > 1 && <span className="block text-xs font-normal text-muted">pago por {nomeDe(r.pagador_id || venda.cliente.id)}</span>}
                     </span>
                     <span className={cx('num font-semibold', r.status === 'estornado' && 'line-through')}>{brl(r.valor)}</span>
                   </div>
