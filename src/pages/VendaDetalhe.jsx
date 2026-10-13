@@ -7,6 +7,7 @@ import { Button, Section, Spinner, Alert, Modal, cx, useToast } from '../compone
 import RecebimentoForm, { FORMAS } from '../features/recebimento/RecebimentoForm'
 import { StatusVenda } from './Vendas'
 
+const ROTULO_TIPO = { GARANTIA: 'Garantia', GARANTIA_VALOR: 'Garantia com valor', CORTESIA: 'Cortesia', CONSERTO: 'Conserto', TROCA: 'Troca' }
 const ICONES = { DINHEIRO: Banknote, PIX: QrCode, CARTEIRA_DIGITAL: Wallet, CARTAO: CreditCard, CARNE: FileText, BOLETO: Receipt, CHEQUE: Landmark, CREDITOS: Coins }
 
 function Receita({ receitas }) {
@@ -54,7 +55,7 @@ export default function VendaDetalhe() {
         id, numero, status, tipo, data_venda, observacoes, campos_extras, loja_id, total_bruto, total_desconto, total_liquido,
         cliente:clientes(id, nome, documento), vendedor:colaboradores!vendas_vendedor_id_fkey(nome), loja:lojas(nome),
         itens:itens_venda(id, sku, descricao, olho, quantidade, preco_unitario, desconto, total, os_id),
-        ordens:ordens_servico(id, numero, letra, status, previsao_entrega, paciente:clientes(nome),
+        ordens:ordens_servico(id, numero, letra, oculos, status, previsao_entrega, paciente:clientes(nome),
           receitas(olho, esferico_longe, cilindrico, eixo, adicao, esferico_perto))
       `).eq('id', id).single(),
       supabase.from('v_venda_resumo').select('*').eq('venda_id', id).single(),
@@ -94,6 +95,7 @@ export default function VendaDetalhe() {
           <div className="flex items-center gap-3">
             <h1 className="text-xl font-bold">Venda <span className="num">{venda.numero}</span></h1>
             <StatusVenda status={venda.status} />
+            {venda.tipo !== 'VENDA' && <span className="rounded bg-accent-soft px-2 py-0.5 text-xs font-semibold text-accent-dark">{ROTULO_TIPO[venda.tipo] || venda.tipo}</span>}
           </div>
           <p className="mt-1 text-sm text-muted">
             {venda.cliente.nome} · {venda.loja.nome} · {venda.vendedor.nome} · {dataHoraBR(venda.data_venda)}
@@ -204,8 +206,8 @@ export default function VendaDetalhe() {
         </Section>
       </div>
 
-      {venda.ordens.map((o) => (
-        <Section key={o.id} title={`OS ${o.numero}-${o.letra}`} aside={
+      {[...venda.ordens].sort((a, b) => a.letra.localeCompare(b.letra) || a.oculos - b.oculos).map((o) => (
+        <Section key={o.id} title={`OS ${o.numero}-${o.letra} · Óculos ${o.oculos}`} aside={
           <div className="flex items-center gap-2">
             <span className="rounded bg-brand-soft px-2 py-1 text-xs font-semibold text-brand">{STATUS_OS[o.status]}</span>
             <Button variant="ghost" size="sm" icon={Printer} onClick={() => nav(`/vendas/${venda.id}/imprimir?os=${o.id}`)}>Imprimir</Button>

@@ -4,16 +4,15 @@ import { brl, somaDias, hojeISO } from '../../lib/format'
 import { olhoVazio } from '../../lib/receita'
 import { Field, Input, Select, Switch, Chips, Section, Button, Textarea, cx } from '../../components/ui'
 import ReceitaGrid from './ReceitaGrid'
-import ClientePicker from './ClientePicker'
 
 export const PRAZO_PADRAO_DIAS = 10
 const dataLocalISO = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 
-export const novaOS = (letra) => ({
+// Cada item é um óculos: letra = cliente (OS A, OS B…), oculos = 1, 2, 3… dentro do cliente
+export const novaOS = (letra, oculos = 1) => ({
   letra,
-  usarReceitaA: letra !== 'A', // OS B, C… herdam graus e DNP da OS A; altura é de cada OS
-  pacienteEhCliente: true,
-  paciente: null,
+  oculos,
+  usarBase: oculos > 1, // óculos 2, 3… herdam graus e DNP do óculos 1 do mesmo cliente; altura é de cada óculos
   data_receita: hojeISO(),
   previsao_entrega: dataLocalISO(somaDias(PRAZO_PADRAO_DIAS)), // retirada: só a data, prazo padrão de 10 dias
   aviso_entrega: 'WHATSAPP',
@@ -154,7 +153,7 @@ function ArmacaoBusca({ armacoes, value, onChange }) {
 const num = (v) => v.replace(/[^\d,.]/g, '')
 
 /* ---------- OS completa ---------- */
-export default function OSForm({ os, osA, onChange, cliente, empresaId, lentes, armacoes, laboratorios, erros = {} }) {
+export default function OSForm({ os, base, onChange, lentes, armacoes, laboratorios, erros = {} }) {
   const set = (patch) => onChange({ ...os, ...patch })
   const setArm = (patch) => set({ armacao: { ...os.armacao, ...patch } })
   const setLen = (patch) => set({ lentes: { ...os.lentes, ...patch } })
@@ -170,16 +169,8 @@ export default function OSForm({ os, osA, onChange, cliente, empresaId, lentes, 
 
   return (
     <div className="flex flex-col gap-6">
-      <Section title="Paciente e entrega">
+      <Section title="Entrega e laboratório">
         <div className="flex flex-col gap-4">
-          <Switch
-            checked={os.pacienteEhCliente}
-            onCheckedChange={(v) => set({ pacienteEhCliente: v, paciente: v ? null : os.paciente })}
-            label={`O paciente é ${cliente ? cliente.nome.split(' ')[0] : 'o próprio cliente'}`}
-          />
-          {!os.pacienteEhCliente && (
-            <ClientePicker label="Paciente" value={os.paciente} onChange={(p) => set({ paciente: p })} empresaId={empresaId} error={erros.paciente} />
-          )}
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <Field label="Data da receita" required>
               {({ id }) => <Input id={id} type="date" value={os.data_receita} onChange={(e) => set({ data_receita: e.target.value })} />}
@@ -207,17 +198,17 @@ export default function OSForm({ os, osA, onChange, cliente, empresaId, lentes, 
         </div>
       </Section>
 
-      <Section title="Receita e medidas" aside={osA && (
-        <Switch checked={os.usarReceitaA} onCheckedChange={(v) => set(v ? { usarReceitaA: true } : {
-          usarReceitaA: false,
-          // ao desligar, a OS começa com uma cópia da receita da OS A para ajustar
-          receita: JSON.parse(JSON.stringify(osA.receita)),
-          lentes: { ...os.lentes, OD: { ...os.lentes.OD, dnp: osA.lentes.OD.dnp }, OE: { ...os.lentes.OE, dnp: osA.lentes.OE.dnp } },
-        })} label="Mesma receita e DNP da OS A" />
+      <Section title="Receita e medidas" aside={base && (
+        <Switch checked={os.usarBase} onCheckedChange={(v) => set(v ? { usarBase: true } : {
+          usarBase: false,
+          // ao desligar, este óculos começa com uma cópia da receita do óculos 1 para ajustar
+          receita: JSON.parse(JSON.stringify(base.receita)),
+          lentes: { ...os.lentes, OD: { ...os.lentes.OD, dnp: base.lentes.OD.dnp }, OE: { ...os.lentes.OE, dnp: base.lentes.OE.dnp } },
+        })} label="Mesma receita e DNP do Óculos 1" />
       )}>
-        {osA && os.usarReceitaA ? (
-          <ReceitaGrid travado receita={osA.receita} onChange={() => {}} exigeAdicao={multifocal}
-            medidas={{ OD: { dnp: osA.lentes.OD.dnp, altura: os.lentes.OD.altura }, OE: { dnp: osA.lentes.OE.dnp, altura: os.lentes.OE.altura } }}
+        {base && os.usarBase ? (
+          <ReceitaGrid travado travadoTexto="Graus e DNP vêm do Óculos 1. Informe só a altura, que depende da armação deste óculos." receita={base.receita} onChange={() => {}} exigeAdicao={multifocal}
+            medidas={{ OD: { dnp: base.lentes.OD.dnp, altura: os.lentes.OD.altura }, OE: { dnp: base.lentes.OE.dnp, altura: os.lentes.OE.altura } }}
             onMedida={(olho, patch) => patch.altura !== undefined && setOlhoLente(olho, { altura: patch.altura })} errosMedidas={erros} />
         ) : (
           <ReceitaGrid receita={os.receita} onChange={(receita) => set({ receita })} exigeAdicao={multifocal}

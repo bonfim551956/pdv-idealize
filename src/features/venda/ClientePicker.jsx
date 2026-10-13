@@ -26,7 +26,7 @@ const mascaraFone = (v) => {
   return d.length > 10 ? d.replace(/(\d{2})(\d{5})(\d{0,4})/, '($1) $2-$3') : d.replace(/(\d{2})(\d{4})(\d{0,4})/, '($1) $2-$3')
 }
 
-function NovoClienteModal({ open, onOpenChange, empresaId, nomeInicial, onCriado }) {
+function NovoClienteModal({ open, onOpenChange, empresaId, nomeInicial, onCriado, principal }) {
   const toast = useToast()
   const [f, setF] = useState({ nome: '', documento: '', celular: '', origem: '', nascimento: '' })
   const [erros, setErros] = useState({})
@@ -40,9 +40,10 @@ function NovoClienteModal({ open, onOpenChange, empresaId, nomeInicial, onCriado
     e.preventDefault()
     const er = {}
     if (f.nome.trim().length < 3) er.nome = 'Informe o nome completo'
-    if (f.documento && !cpfValido(f.documento)) er.documento = 'CPF inválido'
+    if (principal && !f.documento) er.documento = 'Obrigatório'
+    else if (f.documento && !cpfValido(f.documento)) er.documento = 'CPF inválido'
     if (soDigitos(f.celular).length < 10) er.celular = 'Informe um celular com DDD'
-    if (!f.origem) er.origem = 'Escolha como o cliente chegou'
+    if (!principal && !f.origem) er.origem = 'Escolha como o cliente chegou'
     setErros(er)
     if (Object.keys(er).length) return
     setSalvando(true); setErro(null)
@@ -53,7 +54,9 @@ function NovoClienteModal({ open, onOpenChange, empresaId, nomeInicial, onCriado
         nome: f.nome.trim().toUpperCase(),
         documento: soDigitos(f.documento) || null,
         data_nascimento: f.nascimento || null,
-        origem: f.origem,
+        // cliente que veio junto: herda o meio de contato do principal e fica vinculado a ele
+        origem: principal ? principal.origem : f.origem,
+        vinculado_a: principal?.id || null,
       })
       .select('id, nome, documento, origem')
       .single()
@@ -74,7 +77,7 @@ function NovoClienteModal({ open, onOpenChange, empresaId, nomeInicial, onCriado
           {({ id, invalid }) => <Input id={id} invalid={invalid} value={f.nome} onChange={set('nome')} autoFocus />}
         </Field>
         <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="CPF" error={erros.documento}>
+          <Field label="CPF" required={!!principal} error={erros.documento}>
             {({ id, invalid }) => <Input id={id} invalid={invalid} inputMode="numeric" value={f.documento} onChange={(e) => setF((x) => ({ ...x, documento: mascaraCPF(e.target.value) }))} placeholder="000.000.000-00" />}
           </Field>
           <Field label="Data de nascimento">
@@ -83,6 +86,12 @@ function NovoClienteModal({ open, onOpenChange, empresaId, nomeInicial, onCriado
           <Field label="Celular / WhatsApp" required error={erros.celular}>
             {({ id, invalid }) => <Input id={id} invalid={invalid} inputMode="tel" value={f.celular} onChange={(e) => setF((x) => ({ ...x, celular: mascaraFone(e.target.value) }))} placeholder="(15) 99999-9999" />}
           </Field>
+          {principal ? (
+            <div className="flex flex-col gap-1">
+              <span className="text-sm font-medium text-muted">Meio de contato</span>
+              <p className="flex h-12 items-center rounded-md border border-line bg-bg px-3 text-sm">Vinculado a {principal.nome.split(' ')[0]} · {principal.origem || '—'}</p>
+            </div>
+          ) : (
           <Field label="Como chegou até a loja" required error={erros.origem}>
             {({ id, invalid }) => (
               <Select id={id} invalid={invalid} value={f.origem} onChange={set('origem')}>
@@ -91,6 +100,7 @@ function NovoClienteModal({ open, onOpenChange, empresaId, nomeInicial, onCriado
               </Select>
             )}
           </Field>
+          )}
         </div>
         <div className="flex justify-end gap-2 pt-2">
           <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>Cancelar</Button>
@@ -101,7 +111,7 @@ function NovoClienteModal({ open, onOpenChange, empresaId, nomeInicial, onCriado
   )
 }
 
-export default function ClientePicker({ value, onChange, empresaId, label = 'Cliente', error }) {
+export default function ClientePicker({ value, onChange, empresaId, label = 'Cliente', error, principal, excluir = [] }) {
   const [busca, setBusca] = useState('')
   const [res, setRes] = useState([])
   const [buscando, setBuscando] = useState(false)
@@ -115,7 +125,7 @@ export default function ClientePicker({ value, onChange, empresaId, label = 'Cli
       const d = soDigitos(b)
       const filtro = d.length >= 3 ? `nome.ilike.%${b}%,documento.ilike.%${d}%` : `nome.ilike.%${b}%`
       const { data } = await supabase.from('clientes').select('id, nome, documento, origem').or(filtro).order('nome').limit(8)
-      setRes(data || [])
+      setRes((data || []).filter((c) => !excluir.includes(c.id)))
       setBuscando(false)
     }, 250)
     return () => clearTimeout(t)
@@ -164,7 +174,7 @@ export default function ClientePicker({ value, onChange, empresaId, label = 'Cli
           </li>
         </ul>
       )}
-      <NovoClienteModal open={novo} onOpenChange={setNovo} empresaId={empresaId} nomeInicial={/\d/.test(busca) ? '' : busca.trim()} onCriado={(c) => { onChange(c); setBusca('') }} />
+      <NovoClienteModal open={novo} onOpenChange={setNovo} empresaId={empresaId} nomeInicial={/\d/.test(busca) ? '' : busca.trim()} onCriado={(c) => { onChange(c); setBusca('') }} principal={principal} />
     </div>
   )
 }

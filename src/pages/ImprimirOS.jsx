@@ -41,7 +41,7 @@ function Cabecalho({ venda, ordens, via, compacto }) {
       </div>
       <div className="flex items-center gap-3 text-right">
         <div className="text-[9px] leading-tight text-[#4E6468]">
-          <p>Venda <b className="num text-[#16272B]">{venda.numero}</b> · {unica ? `Óculos ${ordens[0].letra}` : `Óculos ${ordens.map((o) => o.letra).join(', ')}`}</p>
+          <p>Venda <b className="num text-[#16272B]">{venda.numero}</b> · {unica ? `OS ${ordens[0].letra} · Óculos ${ordens[0].oculos}` : `${new Set(ordens.map((o) => o.letra)).size} cliente(s) · ${ordens.length} óculos`}</p>
           <p className="num">{dataHoraBR(venda.data_venda)}</p>
         </div>
         <div className="rounded-[1.5mm] bg-[#0B6E71] px-[2.5mm] py-[1mm] text-[#FAFAFA]" style={corExata}>
@@ -299,7 +299,7 @@ function Pagamento({ venda, itens }) {
 
 function ViaLojaVarias({ venda, ordens }) {
   const contato = venda.cliente.contatos?.find((c) => c.principal) || venda.cliente.contatos?.[0]
-  const letraDe = Object.fromEntries(ordens.map((o) => [o.id, o.letra]))
+  const letraDe = Object.fromEntries(ordens.map((o) => [o.id, `${o.letra} · Óc. ${o.oculos}`]))
   const itens = venda.itens.map((i) => ({ ...i, osLetra: letraDe[i.os_id] }))
   return (
     <section className="flex flex-col gap-[2mm]">
@@ -313,7 +313,7 @@ function ViaLojaVarias({ venda, ordens }) {
       {ordens.map((os) => (
         <div key={os.id} className="flex flex-col gap-[1mm] rounded-[1.5mm] border border-[#D2DEDF] p-[1.5mm]">
           <p className="flex flex-wrap gap-x-3 text-[10px]">
-            <b className="font-display">OS {os.numero}-{os.letra} · Óculos {os.letra}</b>
+            <b className="font-display">OS {os.numero}-{os.letra} · Óculos {os.oculos}</b>
             <span>Paciente <b>{os.paciente?.nome}</b></span>
             <span className="ml-auto">Retirada <b className="num">{dataBR(os.previsao_entrega)}</b></span>
           </p>
@@ -345,7 +345,7 @@ function ViaLabVarias({ venda, ordens }) {
       {ordens.map((os) => (
         <div key={os.id} className="flex flex-col gap-[1mm] rounded-[1.5mm] border border-[#D2DEDF] p-[1.5mm]">
           <p className="flex flex-wrap gap-x-3 text-[10px]">
-            <b className="font-display">OS {os.numero}-{os.letra} · Óculos {os.letra}</b>
+            <b className="font-display">OS {os.numero}-{os.letra} · Óculos {os.oculos}</b>
             {pacientes.length > 1 && <span>Paciente <b>{os.paciente?.nome}</b></span>}
             <span>Receita de <b className="num">{dia(os.data_receita)}</b></span>
             {os.iniciais && <span>Iniciais <b>{os.iniciais}</b></span>}
@@ -384,7 +384,7 @@ function ViaClienteVarias({ venda, ordens }) {
       <div className="grid flex-1 grid-cols-2 content-center gap-x-[5mm] gap-y-[2mm] py-[2mm] pr-[5mm]">
         <div>
           <p className="text-[8px] font-bold uppercase tracking-wider text-[#0B6E71]">Via do cliente</p>
-          <p className="num font-display text-[14px] font-extrabold leading-tight">OS {[...new Set(ordens.map((o) => o.numero))].join(' · ')} <span className="text-[10px] font-bold">({ordens.map((o) => o.letra).join(', ')})</span></p>
+          <p className="num font-display text-[14px] font-extrabold leading-tight">OS {[...new Set(ordens.map((o) => o.numero))].join(' · ')} <span className="text-[10px] font-bold">({[...new Set(ordens.map((o) => o.letra))].join(', ')} · {ordens.length} óculos)</span></p>
         </div>
         <div>
           <Rotulo>Valor da compra</Rotulo>
@@ -458,7 +458,7 @@ export default function ImprimirOS() {
       vendedor:colaboradores!vendas_vendedor_id_fkey(nome),
       loja:lojas(nome, cidade, endereco, telefone, whatsapp, cnpj),
       itens:itens_venda(descricao, sku, olho, quantidade, preco_unitario, desconto, total, os_id),
-      ordens:ordens_servico(id, numero, letra, data_receita, previsao_entrega, iniciais, observacoes, aviso_entrega,
+      ordens:ordens_servico(id, numero, letra, oculos, data_receita, previsao_entrega, iniciais, observacoes, aviso_entrega,
         paciente:clientes(nome), laboratorio:laboratorios(nome),
         receitas(olho, esferico_longe, cilindrico, eixo, adicao, esferico_perto, prisma, prisma_base),
         armacao:os_armacao(mha, mva, ponte, dma, tipo, modelo_desenho, enviar_montagem, clipon, produto:produtos(sku, nome)),
@@ -466,7 +466,7 @@ export default function ImprimirOS() {
       recebimentos(forma, valor, modalidade, parcelas, bandeira, status, detalhe:recebimento_parcelas(numero, valor, vencimento, documento))
     `).eq('id', id).single().then(({ data, error }) => {
       if (error) setErro(mensagemErro(error))
-      else setVenda({ ...data, ordens: [...data.ordens].sort((a, b) => a.letra.localeCompare(b.letra)) })
+      else setVenda({ ...data, ordens: [...data.ordens].sort((a, b) => a.letra.localeCompare(b.letra) || a.oculos - b.oculos) })
     })
   }, [id])
 
@@ -496,7 +496,7 @@ export default function ImprimirOS() {
             {venda.ordens.length > 1 && (
               <select aria-label="Ordem de serviço" value={osSel} onChange={(e) => setOsSel(e.target.value)} className="h-10 rounded-md border border-line bg-surface px-2 text-sm">
                 <option value="todas">Todas as OS juntas</option>
-                {venda.ordens.map((o) => <option key={o.id} value={o.id}>OS {o.numero}-{o.letra}</option>)}
+                {venda.ordens.map((o) => <option key={o.id} value={o.id}>OS {o.numero}-{o.letra} · Óculos {o.oculos}</option>)}
               </select>
             )}
             <span className="text-sm text-muted">{folhas.length} {folhas.length === 1 ? 'folha' : 'folhas'} A4</span>

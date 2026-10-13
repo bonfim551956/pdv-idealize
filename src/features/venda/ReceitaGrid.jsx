@@ -99,7 +99,7 @@ function CampoMedida({ medida, valor, onChange, erro, olho, travado }) {
   )
 }
 
-export default function ReceitaGrid({ receita, onChange, exigeAdicao, medidas, onMedida, errosMedidas = {}, travado }) {
+export default function ReceitaGrid({ receita, onChange, exigeAdicao, medidas, onMedida, errosMedidas = {}, travado, travadoTexto }) {
   const setCampo = (olho, key, v) => onChange({ ...receita, [olho]: { ...receita[olho], [key]: v } })
   const copiarParaOE = () => onChange({ ...receita, OE: { ...receita.OD } })
 
@@ -143,7 +143,7 @@ export default function ReceitaGrid({ receita, onChange, exigeAdicao, medidas, o
       })}
 
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="text-xs text-muted">{travado ? 'Graus e DNP vêm da OS A. Informe só a altura, que depende da armação desta OS.' : 'Digite com vírgula ou use ↑ ↓ para ajustar 0,25. O esférico de perto é sugerido pela adição.'}</p>
+        <p className="text-xs text-muted">{travado ? travadoTexto : 'Digite com vírgula ou use ↑ ↓ para ajustar 0,25. O esférico de perto é sugerido pela adição.'}</p>
         {!travado && <button type="button" onClick={copiarParaOE} className="flex items-center gap-1 text-sm font-semibold text-brand hover:underline">
           <Copy className="h-4 w-4" aria-hidden /> Copiar receita do OD para o OE
         </button>}

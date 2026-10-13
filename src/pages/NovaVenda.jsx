@@ -1,8 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import * as Tabs from '@radix-ui/react-tabs'
 import { AnimatePresence, motion } from 'framer-motion'
-import { Check, Plus, Trash2, ArrowLeft, Search } from 'lucide-react'
+import { Check, Plus, Trash2, ArrowLeft, Search, UserPlus, Link2 } from 'lucide-react'
 import { supabase, mensagemErro } from '../lib/supabase'
 import { useAuth } from '../lib/auth'
 import { brl, parseNum } from '../lib/format'
@@ -10,40 +9,54 @@ import { validarOlho, olhoTemDados, olhoParaPayload } from '../lib/receita'
 import { Button, Field, Input, Select, Switch, Section, Spinner, Alert, Textarea, cx, useToast } from '../components/ui'
 import ClienteFicha, { fichaVazia } from '../features/venda/ClienteFicha'
 import OSForm, { novaOS } from '../features/venda/OSForm'
+import ClientePicker from '../features/venda/ClientePicker'
 
-const PASSOS = ['Cliente e vendedor', 'Ordens de serviço', 'Itens e confirmação']
+const PASSOS = ['Venda e cliente', 'Ordens de serviço', 'Itens e confirmação']
+const TIPOS_VENDA = [
+  { value: 'VENDA', label: 'Venda', descricao: 'Venda normal, com cobrança' },
+  { value: 'GARANTIA', label: 'Garantia', descricao: 'Sem cobrança e sem saldo' },
+  { value: 'GARANTIA_VALOR', label: 'Garantia com valor', descricao: 'Garantia com cobrança parcial' },
+  { value: 'CORTESIA', label: 'Cortesia', descricao: 'Sem cobrança e sem saldo' },
+]
+const SEM_COBRANCA = ['GARANTIA', 'CORTESIA']
 const LETRAS = 'ABCDEFGH'
+const MAX_OCULOS = 6
+export const chave = (o) => `${o.letra}${o.oculos}`
+const rotuloOS = (o) => `OS ${o.letra} · Óculos ${o.oculos}`
 
-// Receita e DNP efetivas: OS sincronizadas usam as da OS A; a altura é sempre da própria OS
-export function efetiva(os, osA) {
-  if (!osA || os.letra === 'A' || !os.usarReceitaA) return os
+// Receita e DNP efetivas: óculos 2, 3… do mesmo cliente usam as do óculos 1; a altura é sempre do próprio óculos
+export function efetiva(os, lista) {
+  if (os.oculos === 1 || !os.usarBase) return os
+  const base = lista.find((x) => x.letra === os.letra && x.oculos === 1)
+  if (!base) return os
   return {
     ...os,
-    receita: osA.receita,
+    receita: base.receita,
     lentes: {
       ...os.lentes,
-      OD: { ...os.lentes.OD, dnp: osA.lentes.OD.dnp },
-      OE: { ...os.lentes.OE, dnp: osA.lentes.OE.dnp },
+      OD: { ...os.lentes.OD, dnp: base.lentes.OD.dnp },
+      OE: { ...os.lentes.OE, dnp: base.lentes.OE.dnp },
     },
   }
 }
 
 function itensDaOS(os) {
   const out = []
+  const k = chave(os)
+  const base = { os: rotuloOS(os), cliente: os.letra }
   const { OD, OE } = os.lentes
   if (OD.produto && OE.produto && OD.produto.id === OE.produto.id) {
-    out.push({ key: `${os.letra}-lente`, produto: OD.produto, olho: 'AMBOS', quantidade: 2, os: os.letra })
+    out.push({ ...base, key: `${k}-lente`, produto: OD.produto, olho: 'AMBOS', quantidade: 2 })
   } else {
-    if (OD.produto) out.push({ key: `${os.letra}-lente-OD`, produto: OD.produto, olho: 'OD', quantidade: 1, os: os.letra })
-    if (OE.produto) out.push({ key: `${os.letra}-lente-OE`, produto: OE.produto, olho: 'OE', quantidade: 1, os: os.letra })
+    if (OD.produto) out.push({ ...base, key: `${k}-lente-OD`, produto: OD.produto, olho: 'OD', quantidade: 1 })
+    if (OE.produto) out.push({ ...base, key: `${k}-lente-OE`, produto: OE.produto, olho: 'OE', quantidade: 1 })
   }
-  if (!os.armacao.propria && os.armacao.produto) out.push({ key: `${os.letra}-armacao`, produto: os.armacao.produto, olho: null, quantidade: 1, os: os.letra })
+  if (!os.armacao.propria && os.armacao.produto) out.push({ ...base, key: `${k}-armacao`, produto: os.armacao.produto, olho: null, quantidade: 1 })
   return out
 }
 
 function validarOS(os) {
   const e = {}
-  if (!os.pacienteEhCliente && !os.paciente) e.paciente = 'Escolha o paciente'
   if (!os.previsao_entrega) e.previsao_entrega = 'Informe a data de retirada'
   const temErro = ['OD', 'OE'].some((o) => Object.keys(validarOlho(os.receita[o])).length)
   if (temErro) e.receita = 'Corrija os campos destacados na receita.'
@@ -85,8 +98,10 @@ export default function NovaVenda() {
   const [tipo, setTipo] = useState('VENDA')
   const [observacoes, setObservacoes] = useState('')
   const [gerarOS, setGerarOS] = useState(true)
-  const [osList, setOsList] = useState([novaOS('A')])
-  const [osAtiva, setOsAtiva] = useState('A')
+  const [osList, setOsList] = useState([novaOS('A', 1)])
+  const [ativa, setAtiva] = useState('A1') // óculos aberto na tela (letra + número)
+  const [vinculados, setVinculados] = useState({}) // clientes das OS B, C…: { B: cliente, C: cliente }
+  const [errosCliente, setErrosCliente] = useState({})
   const [descontos, setDescontos] = useState({})
   const [extras, setExtras] = useState([])
   const [buscaExtra, setBuscaExtra] = useState('')
@@ -114,16 +129,38 @@ export default function NovaVenda() {
     })()
   }, [])
 
+  useEffect(() => {
+    window.history.replaceState({ ...window.history.state, pdvPasso: 0 }, '')
+    const onPop = (e) => { if (typeof e.state?.pdvPasso === 'number') { setPasso(e.state.pdvPasso); window.scrollTo({ top: 0 }) } }
+    window.addEventListener('popstate', onPop)
+    return () => window.removeEventListener('popstate', onPop)
+  }, [])
+  const irPara = (n) => {
+    setPasso(n)
+    window.history.pushState({ ...window.history.state, pdvPasso: n }, '')
+    window.scrollTo({ top: 0 })
+  }
+
+  // avisa antes de fechar ou recarregar a página com a venda em andamento
+  const emAndamento = !!(ficha?.nome || cliente || passo > 0)
+  useEffect(() => {
+    if (!emAndamento) return
+    const aviso = (e) => { e.preventDefault(); e.returnValue = '' }
+    window.addEventListener('beforeunload', aviso)
+    return () => window.removeEventListener('beforeunload', aviso)
+  }, [emAndamento])
+
   const empresaId = dados?.lojas.find((l) => l.id === lojaId)?.empresa_id
 
   const itens = useMemo(() => {
     const doOS = gerarOS ? osList.flatMap(itensDaOS) : []
+    const gratis = SEM_COBRANCA.includes(tipo)
     return [...doOS, ...extras].map((it) => {
-      const bruto = Number(it.produto.preco) * it.quantidade
+      const bruto = gratis ? 0 : Number(it.produto.preco) * it.quantidade
       const desc = Math.min(Number(descontos[it.key] || 0), bruto)
       return { ...it, bruto, desconto: desc, total: bruto - desc }
     })
-  }, [osList, extras, descontos, gerarOS])
+  }, [osList, extras, descontos, gerarOS, tipo])
   const totais = itens.reduce((a, i) => ({ bruto: a.bruto + i.bruto, desc: a.desc + i.desconto, total: a.total + i.total }), { bruto: 0, desc: 0, total: 0 })
 
   const resExtras = useMemo(() => {
@@ -132,18 +169,43 @@ export default function NovaVenda() {
     return [...dados.outros, ...dados.armacoes].filter((p) => p.nome.toLowerCase().includes(b) || p.sku.toLowerCase().includes(b)).slice(0, 6)
   }, [buscaExtra, dados])
 
-  const atualizarOS = (letra, os) => setOsList((l) => l.map((o) => (o.letra === letra ? os : o)))
-  const adicionarOS = () => {
-    const letra = LETRAS[osList.length]
-    setOsList((l) => [...l, novaOS(letra)])
-    setOsAtiva(letra)
+  const letras = [...new Set(osList.map((o) => o.letra))]
+  const letraAtiva = ativa.charAt(0)
+  const nomeCliente = (letra) => (letra === 'A' ? cliente?.nome : vinculados[letra]?.nome) || 'Cliente a definir'
+
+  const atualizarOS = (k, os) => setOsList((l) => l.map((o) => (chave(o) === k ? os : o)))
+
+  const adicionarCliente = () => {
+    const letra = LETRAS[letras.length]
+    setOsList((l) => [...l, novaOS(letra, 1)])
+    setAtiva(`${letra}1`)
   }
-  const removerOS = (letra) => {
-    // materializa a receita herdada antes de reordenar as letras
-    const base = osList.map((o) => ({ ...efetiva(o, osList[0]), usarReceitaA: o.usarReceitaA }))
-    const restante = base.filter((o) => o.letra !== letra).map((o, i) => ({ ...o, letra: LETRAS[i], usarReceitaA: i === 0 ? false : o.usarReceitaA }))
-    setOsList(restante)
-    setOsAtiva('A')
+  const removerCliente = (letra) => {
+    const restantes = letras.filter((x) => x !== letra)
+    const mapa = Object.fromEntries(restantes.map((x, i) => [x, LETRAS[i]]))
+    setOsList((l) => l.filter((o) => o.letra !== letra).map((o) => ({ ...o, letra: mapa[o.letra] })))
+    setVinculados((v) => Object.fromEntries(Object.entries(v).filter(([x]) => x !== letra && mapa[x]).map(([x, c]) => [mapa[x], c])))
+    setErrosOS({}); setErrosCliente({})
+    setAtiva('A1')
+  }
+  const adicionarOculos = (letra) => {
+    const n = Math.max(...osList.filter((o) => o.letra === letra).map((o) => o.oculos)) + 1
+    setOsList((l) => [...l, novaOS(letra, n)])
+    setAtiva(`${letra}${n}`)
+  }
+  const removerOculos = (letra, n) => {
+    setOsList((l) => {
+      // materializa a receita herdada antes de renumerar os óculos
+      const fixos = l.map((o) => (o.letra === letra ? { ...efetiva(o, l), usarBase: o.usarBase } : o))
+      let i = 0
+      return fixos.filter((o) => !(o.letra === letra && o.oculos === n)).map((o) => {
+        if (o.letra !== letra) return o
+        i += 1
+        return { ...o, oculos: i, usarBase: i === 1 ? false : o.usarBase }
+      })
+    })
+    setErrosOS({})
+    setAtiva(`${letra}1`)
   }
 
   const avancar = async () => {
@@ -153,17 +215,22 @@ export default function NovaVenda() {
       setAvancando(false)
       if (!c) { window.scrollTo({ top: 0, behavior: 'smooth' }); return }
       setCliente(c)
-      setPasso(gerarOS ? 1 : 2)
+      irPara(gerarOS ? 1 : 2)
+      return
     } else if (passo === 1) {
-      const todos = Object.fromEntries(osList.map((o) => [o.letra, validarOS(efetiva(o, osList[0]))]))
+      const ec = Object.fromEntries(letras.filter((l) => l !== 'A' && !vinculados[l]).map((l) => [l, 'Escolha ou cadastre o cliente desta OS']))
+      setErrosCliente(ec)
+      const todos = Object.fromEntries(osList.map((o) => [chave(o), validarOS(efetiva(o, osList))]))
       setErrosOS(todos)
-      const comErro = osList.find((o) => Object.keys(todos[o.letra]).length)
-      if (comErro) { setOsAtiva(comErro.letra); window.scrollTo({ top: 0, behavior: 'smooth' }); return }
-      setPasso(2)
+      const semCliente = letras.find((l) => ec[l])
+      const comErro = osList.find((o) => Object.keys(todos[chave(o)]).length)
+      if (semCliente) { setAtiva(`${semCliente}1`); window.scrollTo({ top: 0, behavior: 'smooth' }); return }
+      if (comErro) { setAtiva(chave(comErro)); window.scrollTo({ top: 0, behavior: 'smooth' }); return }
+      irPara(2)
     }
-    window.scrollTo({ top: 0 })
   }
-  const voltar = () => { setPasso((p) => (p === 2 && !gerarOS ? 0 : p - 1)); window.scrollTo({ top: 0 }) }
+  // volta uma etapa mantendo tudo o que já foi preenchido
+  const voltar = () => window.history.back()
 
   const confirmar = async () => {
     if (itens.length === 0) { setErroSalvar('Adicione pelo menos um item à venda.'); return }
@@ -177,9 +244,10 @@ export default function NovaVenda() {
       observacoes,
       campos_extras: { meio_contato: cliente.origem },
       confirmar: true,
-      os: gerarOS ? osList.map((o) => efetiva(o, osList[0])).map((os) => ({
+      os: gerarOS ? osList.map((o) => efetiva(o, osList)).map((os) => ({
         letra: os.letra,
-        paciente_id: os.pacienteEhCliente ? null : os.paciente?.id,
+        oculos: os.oculos,
+        paciente_id: os.letra === 'A' ? null : vinculados[os.letra]?.id,
         laboratorio_id: os.laboratorio_id || null,
         data_receita: os.data_receita,
         previsao_entrega: new Date(`${os.previsao_entrega}T23:59:00`).toISOString(),
@@ -238,69 +306,111 @@ export default function NovaVenda() {
         <motion.div key={passo} initial={{ opacity: 0, x: 16 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -16 }} transition={{ duration: 0.18 }}>
           {passo === 0 && (
             <div className="flex flex-col gap-6">
+              <Section title="Venda">
+                <div className="flex flex-col gap-4">
+                  <div className="flex flex-col gap-2">
+                    <span className="text-sm font-medium text-muted">Tipo de venda <span className="text-danger">*</span></span>
+                    <div role="radiogroup" aria-label="Tipo de venda" className="grid grid-cols-2 gap-2 lg:grid-cols-4">
+                      {TIPOS_VENDA.map((t) => (
+                        <button key={t.value} type="button" role="radio" aria-checked={tipo === t.value} onClick={() => setTipo(t.value)}
+                          className={cx('flex flex-col items-start gap-1 rounded-md border px-4 py-3 text-left transition-colors',
+                            tipo === t.value ? 'border-brand bg-brand-soft' : 'border-line bg-surface hover:border-brand')}>
+                          <span className={cx('font-display font-bold', tipo === t.value ? 'text-brand' : 'text-ink')}>{t.label}</span>
+                          <span className="text-xs text-muted">{t.descricao}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <div className="flex flex-col gap-1">
+                      <span className="text-sm font-medium text-muted">Loja e consultor</span>
+                      <p className="flex h-12 items-center rounded-md border border-line bg-bg px-3 text-base">
+                        <span className="font-semibold">{dados.lojas[0]?.nome}</span>
+                        <span className="mx-2 text-muted">·</span>
+                        <span>{perfil.nome}</span>
+                      </p>
+                    </div>
+                    <div className="flex items-end pb-3">
+                      <Switch checked={gerarOS} onCheckedChange={setGerarOS} label="Gerar ordem de serviço (óculos com receita)" />
+                    </div>
+                  </div>
+                </div>
+              </Section>
               <Section title="Cliente">
                 <ClienteFicha ref={fichaRef} empresaId={empresaId} onClienteSalvo={setCliente} ficha={ficha} setFicha={setFicha} />
               </Section>
-              <Section title="Venda">
-                <div className="grid gap-4 sm:grid-cols-3">
-                  <div className="flex flex-col gap-1 sm:col-span-2">
-                    <span className="text-sm font-medium text-muted">Loja e consultor</span>
-                    <p className="flex h-12 items-center rounded-md border border-line bg-bg px-3 text-base">
-                      <span className="font-semibold">{dados.lojas[0]?.nome}</span>
-                      <span className="mx-2 text-muted">·</span>
-                      <span>{perfil.nome}</span>
-                    </p>
-                  </div>
-                  <Field label="Tipo de venda">
-                    {({ id }) => (
-                      <Select id={id} value={tipo} onChange={(e) => setTipo(e.target.value)}>
-                        <option value="VENDA">Venda</option><option value="GARANTIA">Garantia</option>
-                        <option value="CONSERTO">Conserto</option><option value="TROCA">Troca</option>
-                      </Select>
-                    )}
-                  </Field>
-                  <Field label="Observações da venda" className="sm:col-span-3">
-                    {({ id }) => <Textarea id={id} value={observacoes} onChange={(e) => setObservacoes(e.target.value)} />}
-                  </Field>
-                  <div className="sm:col-span-3">
-                    <Switch checked={gerarOS} onCheckedChange={setGerarOS} label="Gerar ordem de serviço (óculos com receita)" />
-                  </div>
-                </div>
+              <Section title="Observações da venda">
+                <Textarea aria-label="Observações da venda" value={observacoes} onChange={(e) => setObservacoes(e.target.value)} placeholder="Opcional" />
               </Section>
             </div>
           )}
 
           {passo === 1 && (
-            <Tabs.Root value={osAtiva} onValueChange={setOsAtiva} className="flex flex-col gap-4">
-              <div className="flex flex-wrap items-center gap-2">
-                <Tabs.List className="flex flex-wrap gap-2" aria-label="Ordens de serviço">
-                  {osList.map((o) => {
-                    const temErro = errosOS[o.letra] && Object.keys(errosOS[o.letra]).length > 0
-                    return (
-                      <Tabs.Trigger key={o.letra} value={o.letra}
-                        className={cx('h-10 rounded-md border px-4 text-sm font-semibold transition-colors',
-                          'data-[state=active]:border-brand data-[state=active]:bg-brand data-[state=active]:text-surface',
-                          'data-[state=inactive]:border-line data-[state=inactive]:bg-surface data-[state=inactive]:text-ink',
-                          temErro && 'data-[state=inactive]:border-danger data-[state=inactive]:text-danger')}>
-                        OS {o.letra}
-                      </Tabs.Trigger>
-                    )
-                  })}
-                </Tabs.List>
-                {osList.length < LETRAS.length && <Button variant="ghost" size="sm" icon={Plus} onClick={adicionarOS}>Outra OS</Button>}
+            <div className="flex flex-col gap-4">
+              {/* OS = cliente. A é quem trouxe o lead; B, C… vieram junto e ficam vinculados a ele */}
+              <div className="flex flex-wrap items-center gap-2" role="tablist" aria-label="Clientes da venda">
+                {letras.map((l) => {
+                  const temErro = errosCliente[l] || osList.some((o) => o.letra === l && errosOS[chave(o)] && Object.keys(errosOS[chave(o)]).length)
+                  const ativo = l === letraAtiva
+                  return (
+                    <button key={l} type="button" role="tab" aria-selected={ativo} onClick={() => setAtiva(`${l}1`)}
+                      className={cx('flex h-12 items-center gap-2 rounded-md border px-4 text-left text-sm transition-colors',
+                        ativo ? 'border-brand bg-brand text-surface' : temErro ? 'border-danger bg-surface text-danger' : 'border-line bg-surface text-ink hover:border-brand')}>
+                      <span className="font-display font-bold">OS {l}</span>
+                      <span className={cx('max-w-[160px] truncate', ativo ? 'text-surface/90' : 'text-muted')}>{nomeCliente(l).split(' ')[0]}</span>
+                      {l === 'A' && <span className={cx('rounded px-1.5 text-xs font-semibold', ativo ? 'bg-surface/20' : 'bg-accent-soft text-accent-dark')}>principal</span>}
+                    </button>
+                  )
+                })}
+                {letras.length < LETRAS.length && <Button variant="ghost" size="sm" icon={UserPlus} onClick={adicionarCliente}>Adicionar cliente</Button>}
               </div>
-              {osList.map((o) => (
-                <Tabs.Content key={o.letra} value={o.letra} className="flex flex-col gap-4 focus:outline-none">
-                  {osList.length > 1 && (
+
+              <Section title={`OS ${letraAtiva} · ${nomeCliente(letraAtiva)}`} aside={letraAtiva !== 'A' && (
+                <Button variant="danger" size="sm" icon={Trash2} onClick={() => removerCliente(letraAtiva)}>Remover OS {letraAtiva}</Button>
+              )}>
+                {letraAtiva === 'A' ? (
+                  <p className="text-sm text-muted">Cliente principal da venda, que veio pelo contato de <b className="text-ink">{cliente?.origem || '—'}</b>. O WhatsApp dele identifica o lead para cruzar com as campanhas.</p>
+                ) : (
+                  <div className="flex flex-col gap-2">
+                    <p className="flex items-center gap-2 text-sm text-muted"><Link2 className="h-4 w-4" aria-hidden /> Fica vinculado a <b className="text-ink">{cliente?.nome}</b> e herda o meio de contato. O WhatsApp dele serve só para avisos.</p>
+                    <ClientePicker label="Cliente desta OS" value={vinculados[letraAtiva] || null} empresaId={empresaId} principal={cliente}
+                      excluir={[cliente?.id, ...Object.entries(vinculados).filter(([l]) => l !== letraAtiva).map(([, c]) => c?.id)].filter(Boolean)}
+                      error={errosCliente[letraAtiva]}
+                      onChange={(c) => { setVinculados((v) => ({ ...v, [letraAtiva]: c })); setErrosCliente((e) => ({ ...e, [letraAtiva]: undefined })) }} />
+                  </div>
+                )}
+              </Section>
+
+              <div className="flex flex-wrap items-center gap-2" role="tablist" aria-label="Óculos deste cliente">
+                {osList.filter((o) => o.letra === letraAtiva).map((o) => {
+                  const k = chave(o)
+                  const temErro = errosOS[k] && Object.keys(errosOS[k]).length > 0
+                  return (
+                    <button key={k} type="button" role="tab" aria-selected={ativa === k} onClick={() => setAtiva(k)}
+                      className={cx('h-10 rounded-md border px-4 text-sm font-semibold transition-colors',
+                        ativa === k ? 'border-brand bg-brand-soft text-brand' : temErro ? 'border-danger text-danger' : 'border-line bg-surface text-ink hover:border-brand')}>
+                      Óculos {o.oculos}
+                    </button>
+                  )
+                })}
+                {osList.filter((o) => o.letra === letraAtiva).length < MAX_OCULOS && (
+                  <Button variant="ghost" size="sm" icon={Plus} onClick={() => adicionarOculos(letraAtiva)}>Outro óculos</Button>
+                )}
+              </div>
+
+              {osList.filter((o) => chave(o) === ativa).map((o) => (
+                <div key={chave(o)} className="flex flex-col gap-4">
+                  {o.oculos > 1 && (
                     <div className="flex justify-end">
-                      <Button variant="danger" size="sm" icon={Trash2} onClick={() => removerOS(o.letra)}>Remover OS {o.letra}</Button>
+                      <Button variant="danger" size="sm" icon={Trash2} onClick={() => removerOculos(o.letra, o.oculos)}>Remover óculos {o.oculos}</Button>
                     </div>
                   )}
-                  <OSForm os={o} osA={o.letra === 'A' ? null : osList[0]} onChange={(n) => atualizarOS(o.letra, n)} cliente={cliente} empresaId={empresaId}
-                    lentes={dados.lentes} armacoes={dados.armacoes} laboratorios={dados.laboratorios} erros={errosOS[o.letra]} />
-                </Tabs.Content>
+                  <OSForm os={o} base={o.oculos > 1 ? osList.find((x) => x.letra === o.letra && x.oculos === 1) : null}
+                    onChange={(n) => atualizarOS(chave(o), n)}
+                    lentes={dados.lentes} armacoes={dados.armacoes} laboratorios={dados.laboratorios} erros={errosOS[chave(o)]} />
+                </div>
               ))}
-            </Tabs.Root>
+            </div>
           )}
 
           {passo === 2 && (
@@ -328,12 +438,12 @@ export default function NovaVenda() {
                               <td className="py-3 pr-3">
                                 <p className="font-medium">{i.produto.nome}</p>
                                 <p className="text-xs text-muted">
-                                  {i.os ? `OS ${i.os}` : 'Avulso'}{i.olho ? ` · ${i.olho === 'AMBOS' ? 'Ambos os olhos' : i.olho}` : ''}
+                                  {i.os || 'Avulso'}{i.olho ? ` · ${i.olho === 'AMBOS' ? 'Ambos os olhos' : i.olho}` : ''}
                                   {Number(i.produto.preco) === 0 && <span className="text-warn"> · sem preço cadastrado</span>}
                                 </p>
                               </td>
                               <td className="py-3 pr-3 num">{i.quantidade}</td>
-                              <td className="py-3 pr-3 text-right num">{brl(i.produto.preco)}</td>
+                              <td className="py-3 pr-3 text-right num">{brl(i.bruto / i.quantidade)}</td>
                               <td className="py-3 pr-3">
                                 <Input aria-label={`Desconto ${i.produto.nome}`} inputMode="decimal" className="num h-10 w-28"
                                   disabled={i.bruto === 0} value={descontos[i.key] ?? ''}
@@ -381,15 +491,29 @@ export default function NovaVenda() {
               <aside className="flex flex-col gap-4 lg:sticky lg:top-6 lg:self-start">
                 <Section title="Resumo">
                   <dl className="flex flex-col gap-2 text-sm">
+                    <div className="flex justify-between"><dt className="text-muted">Tipo</dt><dd className="font-medium">{TIPOS_VENDA.find((t) => t.value === tipo)?.label}</dd></div>
                     <div className="flex justify-between"><dt className="text-muted">Cliente</dt><dd className="text-right font-medium">{cliente?.nome}</dd></div>
                     <div className="flex justify-between"><dt className="text-muted">Vendedor</dt><dd className="font-medium">{perfil.nome}</dd></div>
-                    <div className="flex justify-between"><dt className="text-muted">Ordens de serviço</dt><dd className="num font-medium">{gerarOS ? osList.length : 0}</dd></div>
+                    <div className="flex justify-between"><dt className="text-muted">Clientes / óculos</dt><dd className="num font-medium">{gerarOS ? `${letras.length} / ${osList.length}` : '—'}</dd></div>
+                    {letras.length > 1 && gerarOS && (
+                      <div className="mt-2 flex flex-col gap-1 border-t border-line pt-3">
+                        <dt className="text-xs font-semibold uppercase tracking-wide text-muted">Por cliente</dt>
+                        {letras.map((l) => (
+                          <div key={l} className="flex justify-between gap-2">
+                            <dd className="truncate">OS {l} · {nomeCliente(l).split(' ')[0]}</dd>
+                            <dd className="num">{brl(itens.filter((i) => i.cliente === l).reduce((t, i) => t + i.total, 0))}</dd>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                     <div className="mt-2 flex justify-between border-t border-line pt-3"><dt className="text-muted">Subtotal</dt><dd className="num">{brl(totais.bruto)}</dd></div>
                     <div className="flex justify-between"><dt className="text-muted">Desconto</dt><dd className="num">− {brl(totais.desc)}</dd></div>
                     <div className="flex items-baseline justify-between border-t border-line pt-3"><dt className="font-semibold">Total</dt><dd className="num text-xl font-bold">{brl(totais.total)}</dd></div>
                   </dl>
                 </Section>
-                {totais.total === 0 && itens.length > 0 && <Alert tone="warn">Total zerado: os produtos estão sem preço cadastrado. A venda será salva, mas não terá valor a receber.</Alert>}
+                {SEM_COBRANCA.includes(tipo) ? (
+                  <Alert tone="ok">{TIPOS_VENDA.find((t) => t.value === tipo)?.label}: os itens entram sem cobrança e a venda não gera saldo a receber.</Alert>
+                ) : totais.total === 0 && itens.length > 0 && <Alert tone="warn">Total zerado: os produtos estão sem preço cadastrado. A venda será salva, mas não terá valor a receber.</Alert>}
                 {erroSalvar && <Alert>{erroSalvar}</Alert>}
                 <Button size="lg" onClick={confirmar} loading={salvando} icon={Check}>Confirmar venda</Button>
                 <p className="text-xs text-muted">Ao confirmar, as OS entram na fila do laboratório e você segue para o recebimento.</p>
