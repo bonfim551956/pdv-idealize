@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import * as Tabs from '@radix-ui/react-tabs'
-import { Plus, Search } from 'lucide-react'
+import { Plus, Search, X } from 'lucide-react'
+import { ORDEM_TRAT, ROTULO_TRAT, buscarLentes } from '../lib/lentes'
 import { supabase, mensagemErro } from '../lib/supabase'
 import { brl, parseNum } from '../lib/format'
 import { Button, Field, Input, Select, Chips, Section, Spinner, Alert, Modal, Switch, cx, useToast } from '../components/ui'
@@ -96,12 +97,17 @@ export default function Produtos() {
   const atualizarLocal = (id, patch) => setProdutos((ps) => ps.map((p) => (p.id === id ? { ...p, ...patch } : p)))
 
   const lentes = useMemo(() => (produtos || []).filter((p) => p.tipo === 'lente'), [produtos])
-  const daCat = lentes.filter((l) => l.atributos.categoria === cat)
+  const [buscaLente, setBuscaLente] = useState('')
+  const ativas = lentes.filter((l) => l.ativo)
+  const daCat = ativas.filter((l) => l.atributos.categoria === cat)
   const linhas = [...new Set(daCat.map((l) => l.atributos.linha))]
   const indices = [...new Set(daCat.map((l) => Number(l.atributos.indice)))].sort()
-  const trats = [...new Set(daCat.map((l) => l.atributos.tratamento))]
-  const filtradas = daCat.filter((l) =>
-    (!linha || l.atributos.linha === linha) && (!indice || Number(l.atributos.indice) === indice) && (!trat || l.atributos.tratamento === trat))
+  const trats = [...new Set(daCat.map((l) => l.atributos.tratamento))].sort((a, b) => ORDEM_TRAT.indexOf(a) - ORDEM_TRAT.indexOf(b))
+  // Com busca digitada, procura em todas as lentes ativas (nome ou SKU); sem busca, valem os filtros
+  const filtradas = buscaLente.trim()
+    ? buscarLentes(ativas, buscaLente)
+    : daCat.filter((l) =>
+      (!linha || l.atributos.linha === linha) && (!indice || Number(l.atributos.indice) === indice) && (!trat || l.atributos.tratamento === trat))
   const semPreco = lentes.filter((l) => !Number(l.preco)).length
 
   const outros = useMemo(() => {
@@ -151,11 +157,22 @@ export default function Produtos() {
         <Tabs.Content value="lentes" className="flex flex-col gap-4 focus:outline-none">
           <Section>
             <div className="flex flex-col gap-4">
+              <div className="relative w-full max-w-xl">
+                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" aria-hidden />
+                <Input aria-label="Buscar lente por nome ou SKU" className="pl-9 pr-9" value={buscaLente} onChange={(e) => setBuscaLente(e.target.value)}
+                  placeholder="Buscar por nome ou SKU: ex. rubi 1.67 blue, EXT-156-AR, multi 70 transitions" />
+                {buscaLente && (
+                  <button type="button" onClick={() => setBuscaLente('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted hover:text-ink" aria-label="Limpar busca"><X className="h-4 w-4" /></button>
+                )}
+              </div>
+              {buscaLente.trim() && <p className="text-sm text-muted">{filtradas.length} lente{filtradas.length === 1 ? '' : 's'} encontrada{filtradas.length === 1 ? '' : 's'} pela busca. Limpe a busca para voltar aos filtros.</p>}
+              <div className={cx('flex flex-col gap-4', buscaLente.trim() && 'pointer-events-none opacity-40')}>
               <Chips label="Categoria" value={cat} onChange={(v) => { if (v) { setCat(v); setLinha(null); setIndice(null); setTrat(null) } }}
                 options={[{ value: 'monofocal', label: 'Monofocal' }, { value: 'multifocal', label: 'Multifocal' }]} />
               <Chips label="Linha" value={linha} onChange={setLinha} options={linhas.map((l) => ({ value: l, label: l.replace('MULTIFOCAL ', '') }))} />
               <Chips label="Índice" value={indice} onChange={setIndice} options={indices.map((i) => ({ value: i, label: i.toFixed(2).replace('.', ',') }))} />
-              <Chips label="Tratamento" value={trat} onChange={setTrat} options={trats.map((t) => ({ value: t, label: t.charAt(0) + t.slice(1).toLowerCase() }))} />
+              <Chips label="Tratamento" value={trat} onChange={setTrat} options={trats.map((t) => ({ value: t, label: ROTULO_TRAT[t] || t }))} />
+              </div>
               <div className="flex flex-wrap items-end gap-2 border-t border-line pt-4">
                 <Field label={`Preço para as ${filtradas.length} lentes filtradas (R$)`}>
                   {({ id }) => <Input id={id} inputMode="decimal" className="num w-40" value={massa} onChange={(e) => setMassa(e.target.value.replace(/[^\d,.]/g, ''))} placeholder="0,00" />}
