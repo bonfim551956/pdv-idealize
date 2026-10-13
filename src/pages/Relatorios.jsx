@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { AlertTriangle } from 'lucide-react'
 import { supabase, mensagemErro } from '../lib/supabase'
@@ -6,6 +6,8 @@ import { useAuth } from '../lib/auth'
 import { brl, dataBR, dataHoraBR, STATUS_OS } from '../lib/format'
 import { Chips, Field, Input, Select, Section, Spinner, Alert, Empty, cx } from '../components/ui'
 import { FORMAS } from '../features/recebimento/RecebimentoForm'
+import { Kpi, Barras, pct, nomeLoja } from '../features/relatorios/partes'
+import RelatoriosExtra, { VISOES } from '../features/relatorios/RelatoriosExtra'
 
 const PERIODOS = [
   { value: 'hoje', label: 'Hoje' },
@@ -28,44 +30,7 @@ function intervalo(periodo, de, ate) {
     default: return [new Date(`${de}T00:00:00`), soma(new Date(`${ate}T00:00:00`), 1)]
   }
 }
-const pct = (v, t) => (t > 0 ? `${((v / t) * 100).toFixed(0)}%` : '0%')
-const nomeLoja = (n) => (n || '').replace('Óticas Idealize ', '')
 const titulo = (t) => (t ? t.charAt(0) + t.slice(1).toLowerCase() : '—')
-
-function Kpi({ rotulo, valor, sub, cor }) {
-  return (
-    <div className="flex min-w-0 flex-col gap-1 rounded-lg border border-line bg-surface p-4">
-      <span className="text-xs font-medium text-muted">{rotulo}</span>
-      <span className={cx('num truncate font-display text-xl font-bold', cor)}>{valor}</span>
-      {sub && <span className="text-xs text-muted">{sub}</span>}
-    </div>
-  )
-}
-
-/* Barras horizontais: rótulo, barra proporcional e valores */
-function Barras({ itens, rotulo, valor, detalhe, cor = 'bg-brand', vazio = 'Sem dados no período.' }) {
-  if (!itens?.length) return <p className="text-sm text-muted">{vazio}</p>
-  const max = Math.max(...itens.map((i) => Number(valor(i)) || 0), 1)
-  const total = itens.reduce((s, i) => s + (Number(valor(i)) || 0), 0)
-  return (
-    <ul className="flex flex-col gap-3">
-      {itens.map((i, k) => {
-        const v = Number(valor(i)) || 0
-        return (
-          <li key={k} className="flex flex-col gap-1">
-            <div className="flex items-baseline justify-between gap-2 text-sm">
-              <span className="truncate font-medium">{rotulo(i)}</span>
-              <span className="num shrink-0 text-muted">{detalhe ? detalhe(i) : ''} <b className="text-ink">{pct(v, total)}</b></span>
-            </div>
-            <div className="h-2 overflow-hidden rounded-full bg-line/60">
-              <div className={cx('h-full rounded-full', cor)} style={{ width: `${(v / max) * 100}%` }} />
-            </div>
-          </li>
-        )
-      })}
-    </ul>
-  )
-}
 
 /* Faturamento por dia em colunas */
 function Colunas({ dias }) {
@@ -93,6 +58,8 @@ export default function Relatorios() {
   const [de, setDe] = useState(isoLocal(new Date(new Date().getFullYear(), new Date().getMonth(), 1)))
   const [ate, setAte] = useState(isoLocal(new Date()))
   const [loja, setLoja] = useState('')
+  const [visao, setVisao] = useState('geral')
+  const [ini, fim] = useMemo(() => intervalo(periodo, de, ate), [periodo, de, ate])
   const [lojas, setLojas] = useState([])
   const [r, setR] = useState(null)
   const [erro, setErro] = useState(null)
@@ -121,11 +88,12 @@ export default function Relatorios() {
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <h1 className="text-xl font-bold">Relatórios</h1>
-          <p className="mt-1 text-sm text-muted">{isAdmin ? (loja ? nomeLoja(lojas.find((l) => l.id === loja)?.nome) : 'Todas as lojas') : perfil.loja?.nome} · vendas confirmadas</p>
+          <p className="mt-1 text-sm text-muted">{isAdmin ? (loja ? nomeLoja(lojas.find((l) => l.id === loja)?.nome) : 'Todas as lojas') : perfil.loja?.nome} · {visao === 'detalhado' ? 'todos os registros' : 'vendas confirmadas'}</p>
         </div>
       </div>
 
       <div className="flex flex-col gap-4 rounded-lg border border-line bg-surface p-4">
+        <Chips label="Relatório" options={VISOES} value={visao} onChange={(v) => v && setVisao(v)} />
         <Chips label="Período" options={PERIODOS} value={periodo} onChange={(v) => v && setPeriodo(v)} />
         <div className="flex flex-wrap gap-4">
           {periodo === 'custom' && (
@@ -147,6 +115,7 @@ export default function Relatorios() {
         </div>
       </div>
 
+      {visao !== 'geral' ? <RelatoriosExtra visao={visao} ini={ini} fim={fim} loja={loja} isAdmin={isAdmin} /> : <>
       {erro && <Alert>{erro}</Alert>}
       {r === null ? <Spinner label="Calculando relatórios" /> : !res ? null : res.vendas === 0 && !(r.os_atrasadas?.length) ? (
         <Empty title="Nenhuma venda confirmada nesse período">Escolha outro período para ver os números.</Empty>
@@ -259,6 +228,7 @@ export default function Relatorios() {
           </Section>
         </>
       )}
+      </>}
     </div>
   )
 }

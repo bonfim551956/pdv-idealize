@@ -52,7 +52,7 @@ export default function VendaDetalhe() {
   const carregar = useCallback(async () => {
     const [v, r, rc] = await Promise.all([
       supabase.from('vendas').select(`
-        id, numero, status, tipo, data_venda, observacoes, campos_extras, loja_id, total_bruto, total_desconto, total_liquido,
+        id, numero, os_numero, status, tipo, data_venda, observacoes, campos_extras, loja_id, total_bruto, total_desconto, total_liquido,
         cliente:clientes(id, nome, documento), vendedor:colaboradores!vendas_vendedor_id_fkey(nome), loja:lojas(nome),
         itens:itens_venda(id, sku, descricao, olho, quantidade, preco_unitario, desconto, total, os_id),
         ordens:ordens_servico(id, numero, letra, oculos, status, previsao_entrega, paciente_id, paciente:clientes(id, nome, documento),
@@ -104,7 +104,7 @@ export default function VendaDetalhe() {
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-3">
-            <h1 className="text-xl font-bold">Venda <span className="num">{venda.numero}</span></h1>
+            <h1 className="text-xl font-bold">Venda <span className="num">{venda.numero}</span>{venda.os_numero && <span className="ml-2 rounded-md bg-brand-soft px-2 py-0.5 align-middle text-base text-brand">OS <span className="num">{venda.os_numero}</span></span>}</h1>
             <StatusVenda status={venda.status} />
             {venda.tipo !== 'VENDA' && <span className="rounded bg-accent-soft px-2 py-0.5 text-xs font-semibold text-accent-dark">{ROTULO_TIPO[venda.tipo] || venda.tipo}</span>}
           </div>
