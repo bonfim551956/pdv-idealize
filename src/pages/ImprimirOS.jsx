@@ -23,6 +23,22 @@ const mm = (v) => (v === null || v === undefined || v === '' ? '' : String(Numbe
 const dia = (iso) => (iso ? dataBR(`${iso}T12:00:00`) : '')
 
 /* ---------- peças ---------- */
+const TIPOS = {
+  VENDA: { nome: 'Venda', cls: 'border-[#0B6E71] text-[#0B6E71] bg-[#FAFAFA]' },
+  GARANTIA: { nome: 'Garantia', cls: 'border-[#A3560F] bg-[#FC9E3C] text-[#16272B]' },
+  GARANTIA_VALOR: { nome: 'Garantia c/ valor', cls: 'border-[#A3560F] bg-[#FEF1E2] text-[#A3560F]' },
+  CORTESIA: { nome: 'Cortesia', cls: 'border-[#4E6468] bg-[#E6ECED] text-[#16272B]' },
+  CONSERTO: { nome: 'Conserto', cls: 'border-[#16272B] bg-[#16272B] text-[#FAFAFA]' },
+  TROCA: { nome: 'Troca', cls: 'border-[#4E6468] bg-[#E6ECED] text-[#16272B]' },
+}
+function SeloTipo({ tipo, grande }) {
+  const t = TIPOS[tipo] || TIPOS.VENDA
+  return (
+    <span className={cx('inline-flex items-center rounded-[1mm] border-[1.5px] font-display font-extrabold uppercase tracking-wide', grande ? 'px-[2.5mm] py-[1mm] text-[13px]' : 'px-[1.5mm] py-[0.5mm] text-[10px]', t.cls)}
+      style={{ printColorAdjust: 'exact', WebkitPrintColorAdjust: 'exact' }}>{t.nome}</span>
+  )
+}
+
 function Cabecalho({ venda, ordens, via, compacto }) {
   const l = venda.loja
   const unica = ordens.length === 1
@@ -42,6 +58,7 @@ function Cabecalho({ venda, ordens, via, compacto }) {
         {compacto && <p className="text-[9px] font-bold">{l.nome}</p>}
       </div>
       <div className="flex items-center gap-3 text-right">
+        <SeloTipo tipo={venda.tipo} grande />
         <div className="text-[9px] leading-tight text-[#4E6468]">
           <p>Venda <b className="num text-[#16272B]">{venda.numero}</b> · {unica ? `OS ${ordens[0].letra} · Óculos ${ordens[0].oculos}` : `${new Set(ordens.map((o) => o.letra)).size} cliente(s) · ${ordens.length} óculos`}</p>
           <p className="num">{dataHoraBR(venda.data_venda)}</p>
@@ -282,7 +299,7 @@ function ViaClienteBase({ venda, clienteId, numeroOS, detalhe, retirada, altura 
       </div>
       <div className="grid flex-1 grid-cols-3 content-center gap-x-[4mm] gap-y-[2mm] py-[2.5mm]">
         <div className="col-span-2">
-          <p className="text-[8px] font-bold uppercase tracking-wider text-[#0B6E71]">Via do cliente</p>
+          <p className="flex items-center gap-[2mm] text-[8px] font-bold uppercase tracking-wider text-[#0B6E71]">Via do cliente <SeloTipo tipo={venda.tipo} /></p>
           <p className="num font-display text-[15px] font-extrabold leading-tight">OS {numeroOS} {detalhe && <span className="text-[10px] font-bold">{detalhe}</span>}</p>
         </div>
         <div>
@@ -317,10 +334,9 @@ function ViaCliente({ venda, os }) {
 }
 
 /* ---------- várias OS na mesma impressão ---------- */
-function Pagamento({ venda, itens }) {
-  const ativos = venda.recebimentos.filter((r) => r.status === 'ativo')
-  const recebido = ativos.reduce((s, r) => s + Number(r.valor), 0)
-  const saldo = Number(venda.total_liquido) - recebido
+function Pagamento({ venda, itens, parte }) {
+  const ativos = parte.pagamentos
+  const saldo = parte.saldo
   return (
     <div className="grid grid-cols-[1.5fr_1fr] gap-[4mm] text-[10px]">
       <div>
@@ -335,8 +351,8 @@ function Pagamento({ venda, itens }) {
       </div>
       <div className="leading-snug">
         <Rotulo>Pagamento</Rotulo>
-        {Number(venda.total_desconto) > 0 && <p className="flex justify-between"><span>Desconto</span><span className="num">− {brl(venda.total_desconto)}</span></p>}
-        <p className="flex justify-between font-bold"><span>Total</span><span className="num">{brl(venda.total_liquido)}</span></p>
+        {parte.desconto > 0 && <p className="flex justify-between"><span>Desconto</span><span className="num">− {brl(parte.desconto)}</span></p>}
+        <p className="flex justify-between font-bold"><span>Total</span><span className="num">{brl(parte.total)}</span></p>
         {ativos.slice(0, 3).map((r, k) => (
           <p key={k} className="flex justify-between text-[#4E6468]">
             <span className="truncate">{FORMAS[r.forma]}{r.forma === 'CARTAO' ? ` ${r.modalidade === 'DEBITO' ? 'déb.' : `${r.parcelas}x`}` : ''}{r.detalhe?.length > 1 ? ` ${r.detalhe.length}x` : ''}</span>
@@ -350,17 +366,21 @@ function Pagamento({ venda, itens }) {
 }
 
 function ViaLojaVarias({ venda, ordens }) {
-  const contato = venda.cliente.contatos?.find((c) => c.principal) || venda.cliente.contatos?.[0]
+  const os0 = ordens[0]
+  const vinculado = os0.paciente && os0.paciente.id !== venda.cliente.id
+  const cli = vinculado ? os0.paciente : venda.cliente
+  const contato = cli.contatos?.find((c) => c.principal) || cli.contatos?.[0]
+  const parte = parteDoCliente(venda, os0.paciente_id)
   const letraDe = Object.fromEntries(ordens.map((o) => [o.id, `${o.letra} · Óc. ${o.oculos}`]))
-  const itens = venda.itens.map((i) => ({ ...i, osLetra: letraDe[i.os_id] }))
+  const itens = parte.itens.map((i) => ({ ...i, osLetra: letraDe[i.os_id] }))
   return (
     <section className="flex flex-col gap-[2mm]">
       <Cabecalho venda={venda} ordens={ordens} via="Via da loja" />
       <div className="grid grid-cols-[1.4fr_1fr_1fr_1fr] gap-[3mm]">
-        <Dado rotulo="Cliente" forte>{venda.cliente.nome}</Dado>
-        <Dado rotulo="CPF">{cpf(venda.cliente.documento)}</Dado>
+        <Dado rotulo="Cliente" forte>{cli.nome}</Dado>
+        <Dado rotulo="CPF">{cpf(cli.documento)}</Dado>
         <Dado rotulo="Contato">{fone(contato?.valor)}</Dado>
-        <Dado rotulo="Consultor">{venda.vendedor.nome}</Dado>
+        <Dado rotulo={vinculado ? 'Vinculado a' : 'Consultor'}>{vinculado ? venda.cliente.nome : venda.vendedor.nome}</Dado>
       </div>
       {ordens.map((os) => (
         <div key={os.id} className="flex flex-col gap-[1mm] rounded-[1.5mm] border border-[#D2DEDF] p-[1.5mm]">
@@ -373,7 +393,7 @@ function ViaLojaVarias({ venda, ordens }) {
           <LenteArmacao os={os} />
         </div>
       ))}
-      <Pagamento venda={venda} itens={itens} />
+      <Pagamento venda={venda} itens={itens} parte={parte} />
       <div className="mt-[3mm] grid grid-cols-2 gap-[8mm] text-[8px] text-[#4E6468]">
         <p className="border-t border-[#16272B] pt-[0.5mm]">Recebi os óculos em ___/___/_____ · assinatura do cliente</p>
         <p className="border-t border-[#16272B] pt-[0.5mm]">Entregue por</p>
@@ -427,22 +447,26 @@ function ViaClienteVarias({ venda, ordens }) {
         const o = grupo[0]
         const retirada = grupo.map((x) => x.previsao_entrega).sort().at(-1)
         const detalhe = porCliente.length > 1 ? `· ${o.paciente?.nome?.split(' ')[0] || ''}${grupo.length > 1 ? ` · ${grupo.length} óculos` : ''}` : (grupo.length > 1 ? `· ${grupo.length} óculos` : '')
-        return <ViaClienteBase key={o.letra} venda={venda} clienteId={porCliente.length > 1 ? o.paciente_id : null}
+        return <ViaClienteBase key={o.letra} venda={venda} clienteId={o.paciente_id}
           numeroOS={`${o.numero}-${o.letra}`} detalhe={detalhe} retirada={retirada} altura={porCliente.length > 1 ? '32mm' : '36mm'} />
       })}
     </div>
   )
 }
 
-/* Monta as folhas: tenta tudo numa A4; se não couber, a via da loja + cliente vão
-   na 1ª folha e as vias do laboratório seguem nas próximas, até 3 por folha. */
-function folhasPara(ordens, separar) {
-  if (ordens.length === 1) return [{ tipo: 'unica', ordens }]
-  if (!separar) return [{ tipo: 'consolidada', ordens }]
-  // não coube: loja + cliente numa folha, laboratório (todos os óculos juntos) na seguinte
-  const folhas = [{ tipo: 'loja_cliente', ordens }]
-  for (let i = 0; i < ordens.length; i += 3) folhas.push({ tipo: 'lab_varias', ordens: ordens.slice(i, i + 3) })
-  return folhas
+/* Uma folha A4 por cliente (OS A, OS B…) com todos os óculos dele.
+   Se os óculos de um cliente não couberem, a via da loja + cliente ficam numa folha
+   e a via do laboratório desse cliente segue na próxima. */
+function folhasPara(ordens, separados) {
+  const letras = [...new Set(ordens.map((o) => o.letra))]
+  return letras.flatMap((letra) => {
+    const grupo = ordens.filter((o) => o.letra === letra)
+    if (grupo.length === 1) return [{ tipo: 'unica', letra, ordens: grupo }]
+    if (!separados.includes(letra)) return [{ tipo: 'consolidada', letra, ordens: grupo }]
+    const fs = [{ tipo: 'loja_cliente', letra, ordens: grupo }]
+    for (let k = 0; k < grupo.length; k += 3) fs.push({ tipo: 'lab_varias', letra, ordens: grupo.slice(k, k + 3) })
+    return fs
+  })
 }
 
 function Folha({ folha, venda, refFolha }) {
@@ -484,7 +508,7 @@ export default function ImprimirOS() {
 
   useEffect(() => {
     supabase.from('vendas').select(`
-      id, numero, data_venda, observacoes, campos_extras, total_bruto, total_desconto, total_liquido,
+      id, numero, tipo, data_venda, observacoes, campos_extras, total_bruto, total_desconto, total_liquido,
       cliente:clientes(id, nome, documento, contatos:cliente_contatos(tipo, valor, principal)),
       vendedor:colaboradores!vendas_vendedor_id_fkey(nome),
       loja:lojas(nome, cidade, endereco, telefone, whatsapp, cnpj, razao_social),
@@ -501,17 +525,18 @@ export default function ImprimirOS() {
     })
   }, [id])
 
-  const ordens = useMemo(() => (venda ? venda.ordens.filter((o) => osSel === 'todas' || o.id === osSel) : []), [venda, osSel])
-  const [separar, setSeparar] = useState(false)
+  // seleção por cliente (letra); o link de uma OS específica abre a folha do cliente dela
+  const letraSel = osSel === 'todas' ? 'todas' : (venda?.ordens.find((o) => o.id === osSel)?.letra || osSel)
+  const ordens = useMemo(() => (venda ? venda.ordens.filter((o) => letraSel === 'todas' || o.letra === letraSel) : []), [venda, letraSel])
+  const [separados, setSeparados] = useState([])
   const refs = useRef([])
-  useEffect(() => setSeparar(false), [osSel, venda])
-  const folhas = folhasPara(ordens, separar)
+  useEffect(() => setSeparados([]), [osSel, venda])
+  const folhas = folhasPara(ordens, separados)
   refs.current.length = folhas.length
-  // Se a folha consolidada não couber na A4, reorganiza automaticamente em mais folhas
+  // Se a folha de um cliente não couber na A4, reorganiza só a dele em mais folhas
   useLayoutEffect(() => {
-    if (separar) return
-    const estourou = refs.current.some((el) => el && el.scrollHeight > el.clientHeight + 2)
-    if (estourou && ordens.length > 1) setSeparar(true)
+    const novos = folhas.filter((f, i) => f.tipo === 'consolidada' && refs.current[i] && refs.current[i].scrollHeight > refs.current[i].clientHeight + 2).map((f) => f.letra)
+    if (novos.length) setSeparados((s) => [...new Set([...s, ...novos])])
   })
   useEffect(() => { if (venda) document.title = `OS venda ${venda.numero} - Óticas Idealize` }, [venda])
 
@@ -524,10 +549,13 @@ export default function ImprimirOS() {
         <div className="mx-auto flex max-w-[210mm] flex-wrap items-center justify-between gap-4 px-4 py-3">
           <Link to={`/vendas/${id}`} className="flex items-center gap-1 text-sm text-muted hover:text-ink"><ArrowLeft className="h-4 w-4" /> Venda {venda.numero}</Link>
           <div className="flex items-center gap-3">
-            {venda.ordens.length > 1 && (
-              <select aria-label="Ordem de serviço" value={osSel} onChange={(e) => setOsSel(e.target.value)} className="h-10 rounded-md border border-line bg-surface px-2 text-sm">
-                <option value="todas">Todas as OS juntas</option>
-                {venda.ordens.map((o) => <option key={o.id} value={o.id}>OS {o.numero}-{o.letra} · Óculos {o.oculos}</option>)}
+            {new Set(venda.ordens.map((o) => o.letra)).size > 1 && (
+              <select aria-label="Ordem de serviço" value={letraSel} onChange={(e) => setOsSel(e.target.value)} className="h-10 rounded-md border border-line bg-surface px-2 text-sm">
+                <option value="todas">Todos os clientes</option>
+                {[...new Set(venda.ordens.map((o) => o.letra))].map((l) => {
+                  const o = venda.ordens.find((x) => x.letra === l)
+                  return <option key={l} value={l}>OS {o.numero}-{l} · {o.paciente?.nome?.split(' ')[0]}</option>
+                })}
               </select>
             )}
             <span className="text-sm text-muted">{folhas.length} {folhas.length === 1 ? 'folha' : 'folhas'} A4</span>
@@ -546,4 +574,4 @@ export default function ImprimirOS() {
     </div>
   )
 }
-export { ViaLoja, ViaLaboratorio, ViaCliente, ViaLojaVarias, ViaLabVarias, ViaClienteVarias }
+export { ViaLoja, ViaLaboratorio, ViaCliente, ViaLojaVarias, ViaLabVarias, ViaClienteVarias, folhasPara }
