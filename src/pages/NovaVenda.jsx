@@ -126,7 +126,8 @@ export default function NovaVenda() {
   const [ativa, setAtiva] = useState('A1') // óculos aberto na tela (letra + número)
   const [vinculados, setVinculados] = useState({}) // clientes das OS B, C…: { B: cliente, C: cliente }
   const [errosCliente, setErrosCliente] = useState({})
-  const [descontos, setDescontos] = useState({})
+  const [desconto, setDesconto] = useState('') // desconto sobre o total da venda
+  const [descModo, setDescModo] = useState('valor') // 'valor' (R$) ou 'pct' (%)
   const [extras, setExtras] = useState([])
   const [precos, setPrecos] = useState({}) // valor digitado para serviços (ex.: conserto)
   const [buscaExtra, setBuscaExtra] = useState('')
@@ -180,13 +181,25 @@ export default function NovaVenda() {
   const itens = useMemo(() => {
     const doOS = gerarOS ? osList.flatMap(itensDaOS) : []
     const gratis = SEM_COBRANCA.includes(tipo)
-    return [...doOS, ...extras].map((it) => {
+    const base = [...doOS, ...extras].map((it) => {
       const unit = it.produto.tipo === 'servico' ? valorDe(precos[it.key]) : Number(it.produto.preco)
-      const bruto = gratis ? 0 : unit * it.quantidade
-      const desc = Math.min(valorDe(descontos[it.key]), bruto)
-      return { ...it, bruto, desconto: desc, total: bruto - desc }
+      return { ...it, bruto: gratis ? 0 : Math.round(unit * it.quantidade * 100) }
     })
-  }, [osList, extras, descontos, gerarOS, tipo, precos])
+    // O desconto é dado no total e rateado entre os itens proporcionalmente (em centavos, sem sobra)
+    const brutoCent = base.reduce((t, i) => t + i.bruto, 0)
+    const pedido = descModo === 'pct' ? Math.round(brutoCent * Math.min(valorDe(desconto), 100) / 100) : Math.round(valorDe(desconto) * 100)
+    const descCent = Math.min(pedido, brutoCent)
+    let resto = descCent
+    const comValor = base.filter((i) => i.bruto > 0)
+    return base.map((it) => {
+      let d = 0
+      if (it.bruto > 0 && brutoCent > 0) {
+        d = it === comValor[comValor.length - 1] ? resto : Math.floor((descCent * it.bruto) / brutoCent)
+        resto -= d
+      }
+      return { ...it, bruto: it.bruto / 100, desconto: d / 100, total: (it.bruto - d) / 100 }
+    })
+  }, [osList, extras, desconto, descModo, gerarOS, tipo, precos])
   const totais = itens.reduce((a, i) => ({ bruto: a.bruto + i.bruto, desc: a.desc + i.desconto, total: a.total + i.total }), { bruto: 0, desc: 0, total: 0 })
 
   const resExtras = useMemo(() => {
@@ -496,7 +509,7 @@ export default function NovaVenda() {
                             <th className="py-2 pr-3 font-medium">Produto</th>
                             <th className="py-2 pr-3 font-medium">Qtd</th>
                             <th className="py-2 pr-3 text-right font-medium">Unitário</th>
-                            <th className="py-2 pr-3 font-medium">Desconto (R$)</th>
+                            <th className="py-2 pr-3 text-right font-medium">Desconto</th>
                             <th className="py-2 text-right font-medium">Total</th>
                             <th />
                           </tr>
@@ -518,11 +531,7 @@ export default function NovaVenda() {
                                     value={precos[i.key] ?? ''} onChange={(e) => setPrecos((p) => ({ ...p, [i.key]: soValor(e.target.value) }))} />
                                 ) : brl(i.bruto / i.quantidade)}
                               </td>
-                              <td className="py-3 pr-3">
-                                <Input aria-label={`Desconto ${i.produto.nome}`} inputMode="decimal" className="num h-10 w-28"
-                                  disabled={i.bruto === 0} value={descontos[i.key] ?? ''}
-                                  onChange={(e) => setDescontos((d) => ({ ...d, [i.key]: soValor(e.target.value) }))} placeholder="0,00" />
-                              </td>
+                              <td className="py-3 pr-3 text-right num text-muted">{i.desconto > 0 ? `− ${brl(i.desconto)}` : '—'}</td>
                               <td className="py-3 text-right num font-semibold">{brl(i.total)}</td>
                               <td className="py-3 pl-2">
                                 {!i.os && (
@@ -584,7 +593,26 @@ export default function NovaVenda() {
                       </div>
                     )}
                     <div className="mt-2 flex justify-between border-t border-line pt-3"><dt className="text-muted">Subtotal</dt><dd className="num">{brl(totais.bruto)}</dd></div>
-                    <div className="flex justify-between"><dt className="text-muted">Desconto</dt><dd className="num">− {brl(totais.desc)}</dd></div>
+                    {!SEM_COBRANCA.includes(tipo) && totais.bruto > 0 && (
+                      <div className="flex flex-col gap-2 rounded-md bg-bg p-3">
+                        <dt className="flex items-center justify-between text-muted">
+                          <label htmlFor="desc-total">Desconto na venda</label>
+                          <span className="flex overflow-hidden rounded-md border border-line text-xs font-semibold">
+                            {[['valor', 'R$'], ['pct', '%']].map(([m, r]) => (
+                              <button key={m} type="button" onClick={() => setDescModo(m)} aria-pressed={descModo === m}
+                                className={cx('px-3 py-1', descModo === m ? 'bg-brand text-surface' : 'bg-surface text-muted hover:text-ink')}>{r}</button>
+                            ))}
+                          </span>
+                        </dt>
+                        <dd className="flex items-center gap-2">
+                          <Input id="desc-total" inputMode="decimal" className="num h-10 text-right" placeholder={descModo === 'pct' ? '0' : '0,00'}
+                            value={desconto} onChange={(e) => setDesconto(soValor(e.target.value))} />
+                          <span className="num shrink-0 text-muted">− {brl(totais.desc)}</span>
+                        </dd>
+                        {descModo === 'valor' && valorDe(desconto) > totais.bruto && <p className="text-xs text-warn">Desconto maior que o subtotal: limitado ao valor da venda.</p>}
+                        {descModo === 'pct' && valorDe(desconto) > 100 && <p className="text-xs text-warn">Máximo de 100%.</p>}
+                      </div>
+                    )}
                     <div className="flex items-baseline justify-between border-t border-line pt-3"><dt className="font-semibold">Total</dt><dd className="num text-xl font-bold">{brl(totais.total)}</dd></div>
                     {totais.total > 0 && <div className="flex justify-end"><dd className="num text-sm font-semibold text-brand">ou 10x de {brl(Math.ceil((totais.total / 10) * 100) / 100)} sem juros</dd></div>}
                   </dl>
