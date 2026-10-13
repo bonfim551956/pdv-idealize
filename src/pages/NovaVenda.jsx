@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { AnimatePresence, motion } from 'framer-motion'
 import { Check, Plus, Trash2, ArrowLeft, Search, UserPlus, Link2 } from 'lucide-react'
-import { supabase, mensagemErro } from '../lib/supabase'
+import { supabase, mensagemErro, buscarTodos } from '../lib/supabase'
 import { useAuth } from '../lib/auth'
 import { brl, parseNum } from '../lib/format'
 import { validarOlho, olhoTemDados, olhoParaPayload } from '../lib/receita'
@@ -93,7 +93,7 @@ function validarOS(os, tipo) {
   const temErro = ['OD', 'OE'].some((o) => Object.keys(validarOlho(os.receita[o])).length)
   if (temErro) e.receita = 'Corrija os campos destacados na receita.'
   else if (!olhoTemDados(os.receita.OD) && !olhoTemDados(os.receita.OE)) e.receita = 'Preencha a receita de pelo menos um olho.'
-  const multi = [os.lentes.OD.produto, os.lentes.OE.produto].some((p) => p?.atributos?.categoria === 'multifocal')
+  const multi = [os.lentes.OD.produto, os.lentes.OE.produto].some((p) => ['multifocal', 'ocupacional'].includes(p?.atributos?.categoria))
   if (!e.receita && multi && ['OD', 'OE'].some((o) => olhoTemDados(os.receita[o]) && parseNum(os.receita[o].adicao) === null))
     e.receita = 'Lente multifocal exige adição na receita.'
   if (!os.lentes.OD.produto && !os.lentes.OE.produto) e.lentes = 'Escolha a lente.'
@@ -151,7 +151,7 @@ export default function NovaVenda() {
     ;(async () => {
       const [lojas, prods, labs] = await Promise.all([
         supabase.from('lojas').select('id, nome, empresa_id').eq('id', perfil.loja_id),
-        supabase.from('produtos').select('id, sku, nome, tipo, preco, atributos').eq('ativo', true).order('nome'),
+        buscarTodos(() => supabase.from('produtos').select('id, sku, nome, tipo, preco, atributos').eq('ativo', true).order('nome').order('id')),
         supabase.from('laboratorios').select('id, nome').eq('ativo', true).order('nome'),
       ])
       const err = lojas.error || prods.error || labs.error

@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import * as Tabs from '@radix-ui/react-tabs'
 import { Plus, Search, X } from 'lucide-react'
-import { ORDEM_TRAT, ROTULO_TRAT, buscarLentes } from '../lib/lentes'
-import { supabase, mensagemErro } from '../lib/supabase'
+import { ORDEM_TRAT, ROTULO_TRAT, ORDEM_CAT, ROTULO_CAT, buscarLentes } from '../lib/lentes'
+import { supabase, mensagemErro, buscarTodos } from '../lib/supabase'
 import { brl, parseNum } from '../lib/format'
 import { Button, Field, Input, Select, Chips, Section, Spinner, Alert, Modal, Switch, cx, useToast } from '../components/ui'
 
@@ -80,6 +80,7 @@ export default function Produtos() {
   const [produtos, setProdutos] = useState(null)
   const [erro, setErro] = useState(null)
   const [cat, setCat] = useState('monofocal')
+  const [marca, setMarca] = useState('IDEALIZE')
   const [linha, setLinha] = useState(null)
   const [indice, setIndice] = useState(null)
   const [trat, setTrat] = useState(null)
@@ -89,7 +90,7 @@ export default function Produtos() {
   const [novo, setNovo] = useState(false)
 
   useEffect(() => {
-    supabase.from('produtos').select('*').order('sku').then(({ data, error }) => {
+    buscarTodos(() => supabase.from('produtos').select('*').order('sku')).then(({ data, error }) => {
       if (error) setErro(mensagemErro(error)); else setProdutos(data)
     })
   }, [])
@@ -99,10 +100,13 @@ export default function Produtos() {
   const lentes = useMemo(() => (produtos || []).filter((p) => p.tipo === 'lente'), [produtos])
   const [buscaLente, setBuscaLente] = useState('')
   const ativas = lentes.filter((l) => l.ativo)
-  const daCat = ativas.filter((l) => l.atributos.categoria === cat)
+  const marcaDe = (l) => l.atributos.marca || 'IDEALIZE'
+  const cats = ORDEM_CAT.filter((c) => ativas.some((l) => l.atributos.categoria === c))
+  const marcas = [...new Set(ativas.filter((l) => l.atributos.categoria === cat).map(marcaDe))].sort((a, b) => (a === 'IDEALIZE' ? -1 : b === 'IDEALIZE' ? 1 : a.localeCompare(b)))
+  const daCat = ativas.filter((l) => l.atributos.categoria === cat && marcaDe(l) === marca)
   const linhas = [...new Set(daCat.map((l) => l.atributos.linha))]
-  const indices = [...new Set(daCat.map((l) => Number(l.atributos.indice)))].sort()
-  const trats = [...new Set(daCat.map((l) => l.atributos.tratamento))].sort((a, b) => ORDEM_TRAT.indexOf(a) - ORDEM_TRAT.indexOf(b))
+  const indices = [...new Set(daCat.filter((l) => !linha || l.atributos.linha === linha).map((l) => Number(l.atributos.indice)))].sort((a, b) => a - b)
+  const trats = [...new Set(daCat.filter((l) => (!linha || l.atributos.linha === linha) && (!indice || Number(l.atributos.indice) === indice)).map((l) => l.atributos.tratamento))].sort((a, b) => ORDEM_TRAT.indexOf(a) - ORDEM_TRAT.indexOf(b))
   // Com busca digitada, procura em todas as lentes ativas (nome ou SKU); sem busca, valem os filtros
   const filtradas = buscaLente.trim()
     ? buscarLentes(ativas, buscaLente)
@@ -120,7 +124,10 @@ export default function Produtos() {
     if (n === null || Number.isNaN(n) || n < 0) { toast('Informe um preço válido.', 'erro'); return }
     setAplicando(true)
     const ids = filtradas.map((f) => f.id)
-    const { error } = await supabase.from('produtos').update({ preco: n }).in('id', ids)
+    let error = null
+    for (let i = 0; i < ids.length && !error; i += 150) {
+      ;({ error } = await supabase.from('produtos').update({ preco: n }).in('id', ids.slice(i, i + 150)))
+    }
     setAplicando(false)
     if (error) { toast(mensagemErro(error), 'erro'); return }
     setProdutos((ps) => ps.map((p) => (ids.includes(p.id) ? { ...p, preco: n } : p)))
@@ -167,9 +174,11 @@ export default function Produtos() {
               </div>
               {buscaLente.trim() && <p className="text-sm text-muted">{filtradas.length} lente{filtradas.length === 1 ? '' : 's'} encontrada{filtradas.length === 1 ? '' : 's'} pela busca. Limpe a busca para voltar aos filtros.</p>}
               <div className={cx('flex flex-col gap-4', buscaLente.trim() && 'pointer-events-none opacity-40')}>
-              <Chips label="Categoria" value={cat} onChange={(v) => { if (v) { setCat(v); setLinha(null); setIndice(null); setTrat(null) } }}
-                options={[{ value: 'monofocal', label: 'Monofocal' }, { value: 'multifocal', label: 'Multifocal' }]} />
-              <Chips label="Linha" value={linha} onChange={setLinha} options={linhas.map((l) => ({ value: l, label: l.replace('MULTIFOCAL ', '') }))} />
+              <Chips label="Categoria" value={cat} onChange={(v) => { if (v) { setCat(v); setLinha(null); setIndice(null); setTrat(null); const ms = ativas.filter((l) => l.atributos.categoria === v).map(marcaDe); if (!ms.includes(marca)) setMarca(ms[0] || 'IDEALIZE') } }}
+                options={cats.map((c) => ({ value: c, label: ROTULO_CAT[c] }))} />
+              <Chips label="Marca" value={marca} onChange={(v) => { if (v) { setMarca(v); setLinha(null); setIndice(null); setTrat(null) } }}
+                options={marcas.map((m) => ({ value: m, label: m === 'IDEALIZE' ? 'Idealize' : m.charAt(0) + m.slice(1).toLowerCase() }))} />
+              <Chips label="Linha" value={linha} onChange={setLinha} options={linhas.sort().map((l) => ({ value: l, label: l.replace('MULTIFOCAL ', '').replace(/^ZEISS /, '') }))} />
               <Chips label="Índice" value={indice} onChange={setIndice} options={indices.map((i) => ({ value: i, label: i.toFixed(2).replace('.', ',') }))} />
               <Chips label="Tratamento" value={trat} onChange={setTrat} options={trats.map((t) => ({ value: t, label: ROTULO_TRAT[t] || t }))} />
               </div>

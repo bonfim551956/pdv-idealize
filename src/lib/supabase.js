@@ -28,3 +28,14 @@ export function mensagemErro(e) {
   if (e.code === '23514') return 'Algum valor está fora do permitido. Confira os campos destacados.'
   return msg
 }
+
+// Busca todas as linhas de uma consulta, em páginas de 1000 (limite da API do Supabase)
+export async function buscarTodos(montar, passo = 1000) {
+  let todos = []
+  for (let de = 0; ; de += passo) {
+    const { data, error } = await montar().range(de, de + passo - 1)
+    if (error) return { data: null, error }
+    todos = todos.concat(data || [])
+    if (!data || data.length < passo) return { data: todos, error: null }
+  }
+}
