@@ -4,7 +4,7 @@ import { brl, somaDias, hojeISO } from '../../lib/format'
 import { olhoVazio } from '../../lib/receita'
 import { Field, Input, Select, Switch, Chips, Section, Button, Textarea, cx } from '../../components/ui'
 import ReceitaGrid from './ReceitaGrid'
-import { ORDEM_TRAT, ROTULO_TRAT, ORDEM_CAT, ROTULO_CAT, normalizar, textoBusca, rotuloIndice } from '../../lib/lentes'
+import { ORDEM_TRAT, ROTULO_TRAT, ORDEM_CAT, ROTULO_CAT, GRUPOS, ROTULO_GRUPO, normalizar, textoBusca, rotuloIndice } from '../../lib/lentes'
 import ReceitaExameModal, { receitaDoExame } from './ReceitaExameModal'
 
 export const TIPOS_ARO = [
@@ -86,9 +86,10 @@ function BuscaLente({ lentes, onEscolher }) {
 
 function LenteSelector({ lentes, value, onChange, cor }) {
   // Passos encadeados: tipo → marca → linha → índice → variante (cor/fotossensível) → tratamento
-  const PASSOS = ['categoria', 'marca', 'linha', 'indice', 'variante', 'tratamento']
+  const PASSOS = ['grupo', 'categoria', 'marca', 'linha', 'indice', 'variante', 'tratamento']
   const val = (l, k) => {
     const a = l.atributos || {}
+    if (k === 'grupo') return a.fabricante || 'IDEALIZE'
     if (k === 'marca') return a.marca || 'IDEALIZE'
     if (k === 'variante') return a.variante || ''
     if (k === 'indice') return Number(a.indice)
@@ -108,6 +109,7 @@ function LenteSelector({ lentes, value, onChange, cor }) {
     if (k === 'tratamento') return arr.sort((a, b) => (ORDEM_TRAT.indexOf(a) + 1 || 99) - (ORDEM_TRAT.indexOf(b) + 1 || 99) || String(a).localeCompare(String(b)))
     if (k === 'marca') return arr.sort((a, b) => (a === 'IDEALIZE' ? -1 : b === 'IDEALIZE' ? 1 : a.localeCompare(b)))
     if (k === 'categoria') return arr.sort((a, b) => ORDEM_CAT.indexOf(a) - ORDEM_CAT.indexOf(b))
+    if (k === 'grupo') return arr.sort((a, b) => GRUPOS.indexOf(a) - GRUPOS.indexOf(b))
     return arr.sort((a, b) => String(a).localeCompare(String(b)))
   }
 
@@ -133,13 +135,14 @@ function LenteSelector({ lentes, value, onChange, cor }) {
     onChange(l)
   }
 
-  const ROTULOS = { categoria: 'Tipo', marca: 'Marca', linha: 'Linha', indice: 'Índice / material', variante: 'Cor / filtro', tratamento: 'Tratamento' }
+  const ROTULOS = { grupo: 'Lentes', categoria: 'Tipo', marca: 'Marca', linha: 'Linha', indice: 'Índice / material', variante: 'Cor / filtro', tratamento: 'Tratamento' }
   const rotuloOpcao = (k, v) => {
+    if (k === 'grupo') return ROTULO_GRUPO[v] || v
     if (k === 'categoria') return ROTULO_CAT[v] || v
     if (k === 'marca') return v === 'IDEALIZE' ? 'Idealize' : v.charAt(0) + v.slice(1).toLowerCase()
     if (k === 'linha') return String(v).replace('MULTIFOCAL ', '').replace(/^ZEISS /, '')
     if (k === 'indice') {
-      const mats = [...new Set(lentes.filter((l) => PASSOS.slice(0, 3).every((x) => val(l, x) === sel[x]) && val(l, 'indice') === v).map((l) => l.atributos.material).filter(Boolean))]
+      const mats = [...new Set(lentes.filter((l) => PASSOS.slice(0, 4).every((x) => val(l, x) === sel[x]) && val(l, 'indice') === v).map((l) => l.atributos.material).filter(Boolean))]
       return mats.length === 1 && !/^\d/.test(mats[0]) ? mats[0].charAt(0) + mats[0].slice(1).toLowerCase() : rotuloIndice(v)
     }
     if (k === 'variante') return v || 'Incolor'
@@ -152,7 +155,7 @@ function LenteSelector({ lentes, value, onChange, cor }) {
       {PASSOS.map((k, i) => {
         if (i > 0 && sel[PASSOS[i - 1]] === null) return null
         const op = ordenar(k, opcoes(sel, k))
-        if (k !== 'categoria' && op.length <= 1) return null
+        if (!['grupo', 'categoria'].includes(k) && op.length <= 1) return null
         return (
           <div key={k} className="flex flex-col gap-2">
             <span className="text-sm font-medium text-muted">{ROTULOS[k]}</span>

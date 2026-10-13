@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import * as Tabs from '@radix-ui/react-tabs'
 import { Plus, Search, X } from 'lucide-react'
-import { ORDEM_TRAT, ROTULO_TRAT, ORDEM_CAT, ROTULO_CAT, buscarLentes } from '../lib/lentes'
+import { ORDEM_TRAT, ROTULO_TRAT, ORDEM_CAT, ROTULO_CAT, GRUPOS, ROTULO_GRUPO, grupoDe, buscarLentes } from '../lib/lentes'
 import { supabase, mensagemErro, buscarTodos } from '../lib/supabase'
 import { brl, parseNum } from '../lib/format'
 import { Button, Field, Input, Select, Chips, Section, Spinner, Alert, Modal, Switch, cx, useToast } from '../components/ui'
@@ -80,7 +80,8 @@ export default function Produtos() {
   const [produtos, setProdutos] = useState(null)
   const [erro, setErro] = useState(null)
   const [cat, setCat] = useState('monofocal')
-  const [marca, setMarca] = useState('IDEALIZE')
+  const [grupo, setGrupo] = useState('IDEALIZE')
+  const [marca, setMarca] = useState(null)
   const [linha, setLinha] = useState(null)
   const [indice, setIndice] = useState(null)
   const [trat, setTrat] = useState(null)
@@ -101,9 +102,10 @@ export default function Produtos() {
   const [buscaLente, setBuscaLente] = useState('')
   const ativas = lentes.filter((l) => l.ativo)
   const marcaDe = (l) => l.atributos.marca || 'IDEALIZE'
-  const cats = ORDEM_CAT.filter((c) => ativas.some((l) => l.atributos.categoria === c))
-  const marcas = [...new Set(ativas.filter((l) => l.atributos.categoria === cat).map(marcaDe))].sort((a, b) => (a === 'IDEALIZE' ? -1 : b === 'IDEALIZE' ? 1 : a.localeCompare(b)))
-  const daCat = ativas.filter((l) => l.atributos.categoria === cat && marcaDe(l) === marca)
+  const doGrupo = ativas.filter((l) => grupoDe(l) === grupo)
+  const cats = ORDEM_CAT.filter((c) => doGrupo.some((l) => l.atributos.categoria === c))
+  const marcas = [...new Set(doGrupo.filter((l) => l.atributos.categoria === cat).map(marcaDe))].sort()
+  const daCat = doGrupo.filter((l) => l.atributos.categoria === cat && (!marca || marcaDe(l) === marca))
   const linhas = [...new Set(daCat.map((l) => l.atributos.linha))]
   const indices = [...new Set(daCat.filter((l) => !linha || l.atributos.linha === linha).map((l) => Number(l.atributos.indice)))].sort((a, b) => a - b)
   const trats = [...new Set(daCat.filter((l) => (!linha || l.atributos.linha === linha) && (!indice || Number(l.atributos.indice) === indice)).map((l) => l.atributos.tratamento))].sort((a, b) => ORDEM_TRAT.indexOf(a) - ORDEM_TRAT.indexOf(b))
@@ -174,10 +176,14 @@ export default function Produtos() {
               </div>
               {buscaLente.trim() && <p className="text-sm text-muted">{filtradas.length} lente{filtradas.length === 1 ? '' : 's'} encontrada{filtradas.length === 1 ? '' : 's'} pela busca. Limpe a busca para voltar aos filtros.</p>}
               <div className={cx('flex flex-col gap-4', buscaLente.trim() && 'pointer-events-none opacity-40')}>
-              <Chips label="Categoria" value={cat} onChange={(v) => { if (v) { setCat(v); setLinha(null); setIndice(null); setTrat(null); const ms = ativas.filter((l) => l.atributos.categoria === v).map(marcaDe); if (!ms.includes(marca)) setMarca(ms[0] || 'IDEALIZE') } }}
+              <Chips label="Lentes" value={grupo} onChange={(v) => { if (v) { setGrupo(v); setMarca(null); setLinha(null); setIndice(null); setTrat(null); const cs = ORDEM_CAT.filter((c) => ativas.some((l) => grupoDe(l) === v && l.atributos.categoria === c)); if (!cs.includes(cat)) setCat(cs[0]) } }}
+                options={GRUPOS.filter((g) => ativas.some((l) => grupoDe(l) === g)).map((g) => ({ value: g, label: ROTULO_GRUPO[g] }))} />
+              <Chips label="Categoria" value={cat} onChange={(v) => { if (v) { setCat(v); setMarca(null); setLinha(null); setIndice(null); setTrat(null) } }}
                 options={cats.map((c) => ({ value: c, label: ROTULO_CAT[c] }))} />
-              <Chips label="Marca" value={marca} onChange={(v) => { if (v) { setMarca(v); setLinha(null); setIndice(null); setTrat(null) } }}
-                options={marcas.map((m) => ({ value: m, label: m === 'IDEALIZE' ? 'Idealize' : m.charAt(0) + m.slice(1).toLowerCase() }))} />
+              {marcas.length > 1 && (
+                <Chips label="Marca" value={marca} onChange={(v) => { setMarca(v); setLinha(null); setIndice(null); setTrat(null) }}
+                  options={marcas.map((m) => ({ value: m, label: m.charAt(0) + m.slice(1).toLowerCase() }))} />
+              )}
               <Chips label="Linha" value={linha} onChange={setLinha} options={linhas.sort().map((l) => ({ value: l, label: l.replace('MULTIFOCAL ', '').replace(/^ZEISS /, '') }))} />
               <Chips label="Índice" value={indice} onChange={setIndice} options={indices.map((i) => ({ value: i, label: i.toFixed(2).replace('.', ',') }))} />
               <Chips label="Tratamento" value={trat} onChange={setTrat} options={trats.map((t) => ({ value: t, label: ROTULO_TRAT[t] || t }))} />

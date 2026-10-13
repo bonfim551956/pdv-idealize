@@ -5,6 +5,10 @@ export const ROTULO_TRAT = {
   'FOTOCROMATICO AR': 'Fotocromático AR', 'FOTOCROMATICO INCOLOR': 'Fotocromático incolor',
   'TRANSITIONS AR': 'Transitions AR', 'TRANSITIONS INCOLOR': 'Transitions incolor',
 }
+// Subcategoria principal (quem fabrica): Idealize, Varilux/Essilor e Zeiss
+export const GRUPOS = ['IDEALIZE', 'ESSILOR', 'ZEISS']
+export const ROTULO_GRUPO = { IDEALIZE: 'Idealize', ESSILOR: 'Varilux / Essilor', ZEISS: 'Zeiss' }
+export const grupoDe = (l) => (l.atributos && l.atributos.fabricante) || 'IDEALIZE'
 export const ORDEM_CAT = ['monofocal', 'multifocal', 'ocupacional', 'solar', 'controle de miopia']
 export const ROTULO_CAT = { monofocal: 'Visão simples', multifocal: 'Multifocal', ocupacional: 'Ocupacional', solar: 'Solar', 'controle de miopia': 'Controle de miopia' }
 export const rotuloIndice = (i) => Number(i).toFixed(2).replace('.', ',')
