@@ -4,7 +4,7 @@ import { brl, somaDias, hojeISO } from '../../lib/format'
 import { olhoVazio } from '../../lib/receita'
 import { Field, Input, Select, Switch, Chips, Section, Button, Textarea, cx } from '../../components/ui'
 import ReceitaGrid from './ReceitaGrid'
-import { ORDEM_TRAT, ROTULO_TRAT, ORDEM_CAT, ROTULO_CAT, GRUPOS, ROTULO_GRUPO, normalizar, textoBusca, rotuloIndice } from '../../lib/lentes'
+import { normalizar, textoBusca } from '../../lib/lentes'
 import ReceitaExameModal, { receitaDoExame } from './ReceitaExameModal'
 
 export const TIPOS_ARO = [
@@ -85,85 +85,12 @@ function BuscaLente({ lentes, onEscolher }) {
 }
 
 function LenteSelector({ lentes, value, onChange, cor }) {
-  // Passos encadeados: tipo → marca → linha → índice → variante (cor/fotossensível) → tratamento
-  const PASSOS = ['grupo', 'categoria', 'marca', 'linha', 'indice', 'variante', 'tratamento']
-  const val = (l, k) => {
-    const a = l.atributos || {}
-    if (k === 'grupo') return a.fabricante || 'IDEALIZE'
-    if (k === 'marca') return a.marca || 'IDEALIZE'
-    if (k === 'variante') return a.variante || ''
-    if (k === 'indice') return Number(a.indice)
-    return a[k]
-  }
-  const doProduto = (l) => Object.fromEntries(PASSOS.map((k) => [k, val(l, k)]))
-  const [sel, setSel] = useState(value ? doProduto(value) : Object.fromEntries(PASSOS.map((k) => [k, null])))
-
-  const opcoes = (s, k) => {
-    const i = PASSOS.indexOf(k)
-    const ant = PASSOS.slice(0, i)
-    const vs = lentes.filter((l) => ant.every((x) => s[x] === null || val(l, x) === s[x])).map((l) => val(l, k))
-    return [...new Set(vs)]
-  }
-  const ordenar = (k, arr) => {
-    if (k === 'indice') return arr.sort((a, b) => a - b)
-    if (k === 'tratamento') return arr.sort((a, b) => (ORDEM_TRAT.indexOf(a) + 1 || 99) - (ORDEM_TRAT.indexOf(b) + 1 || 99) || String(a).localeCompare(String(b)))
-    if (k === 'marca') return arr.sort((a, b) => (a === 'IDEALIZE' ? -1 : b === 'IDEALIZE' ? 1 : a.localeCompare(b)))
-    if (k === 'categoria') return arr.sort((a, b) => ORDEM_CAT.indexOf(a) - ORDEM_CAT.indexOf(b))
-    if (k === 'grupo') return arr.sort((a, b) => GRUPOS.indexOf(a) - GRUPOS.indexOf(b))
-    return arr.sort((a, b) => String(a).localeCompare(String(b)))
-  }
-
-  const escolher = (k, v) => {
-    const i = PASSOS.indexOf(k)
-    const novo = { ...sel, [k]: v }
-    PASSOS.slice(i + 1).forEach((x) => (novo[x] = null))
-    // passos com uma única opção já ficam escolhidos (ex.: lentes sem variante)
-    if (v !== null) {
-      for (const x of PASSOS.slice(i + 1)) {
-        const op = opcoes(novo, x)
-        if (op.length === 1) novo[x] = op[0]
-        else break
-      }
-    }
-    setSel(novo)
-    const prod = PASSOS.every((x) => novo[x] !== null) ? lentes.find((l) => PASSOS.every((x) => val(l, x) === novo[x])) : null
-    onChange(prod || null)
-  }
-
-  const escolherDaBusca = (l) => {
-    setSel(doProduto(l))
-    onChange(l)
-  }
-
-  const ROTULOS = { grupo: 'Lentes', categoria: 'Tipo', marca: 'Marca', linha: 'Linha', indice: 'Índice / material', variante: 'Cor / filtro', tratamento: 'Tratamento' }
-  const rotuloOpcao = (k, v) => {
-    if (k === 'grupo') return ROTULO_GRUPO[v] || v
-    if (k === 'categoria') return ROTULO_CAT[v] || v
-    if (k === 'marca') return v === 'IDEALIZE' ? 'Idealize' : v.charAt(0) + v.slice(1).toLowerCase()
-    if (k === 'linha') return String(v).replace('MULTIFOCAL ', '').replace(/^ZEISS /, '')
-    if (k === 'indice') {
-      const mats = [...new Set(lentes.filter((l) => PASSOS.slice(0, 4).every((x) => val(l, x) === sel[x]) && val(l, 'indice') === v).map((l) => l.atributos.material).filter(Boolean))]
-      return mats.length === 1 && !/^\d/.test(mats[0]) ? mats[0].charAt(0) + mats[0].slice(1).toLowerCase() : rotuloIndice(v)
-    }
-    if (k === 'variante') return v || 'Incolor'
-    return ROTULO_TRAT[v] || v
-  }
+  // Só a busca por nome/SKU: os botões de filtro foram retirados para simplificar
+  const escolherDaBusca = (l) => onChange(l)
 
   return (
     <div className="flex flex-col gap-4">
       <BuscaLente lentes={lentes} onEscolher={escolherDaBusca} />
-      {PASSOS.map((k, i) => {
-        if (i > 0 && sel[PASSOS[i - 1]] === null) return null
-        const op = ordenar(k, opcoes(sel, k))
-        if (!['grupo', 'categoria'].includes(k) && op.length <= 1) return null
-        return (
-          <div key={k} className="flex flex-col gap-2">
-            <span className="text-sm font-medium text-muted">{ROTULOS[k]}</span>
-            <Chips label={ROTULOS[k]} value={sel[k]} onChange={(v) => escolher(k, v)}
-              options={op.map((v) => ({ value: v, label: rotuloOpcao(k, v) }))} />
-          </div>
-        )
-      })}
       {value && (
         <div className={cx('flex items-center justify-between rounded-md border-l-4 bg-surface px-4 py-3', cor === 'oe' ? 'border-oe' : 'border-od')}>
           <div>
