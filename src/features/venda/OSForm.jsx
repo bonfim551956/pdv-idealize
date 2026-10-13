@@ -36,12 +36,21 @@ export const novaOS = (letra, oculos = 1) => ({
 })
 
 /* ---------- Lente: filtros encadeados ---------- */
-const ORDEM_TRAT = ['AR', 'BLUE', 'BLUE AR', 'BLUE INCOLOR', 'FOTOCROMATICO', 'TRANSITIONS']
+const ORDEM_TRAT = ['AR', 'BLUE AR', 'BLUE INCOLOR', 'FOTOCROMATICO AR', 'FOTOCROMATICO INCOLOR', 'TRANSITIONS AR', 'TRANSITIONS INCOLOR']
+const ROTULO_TRAT = {
+  AR: 'AR', 'BLUE AR': 'Blue AR', 'BLUE INCOLOR': 'Blue incolor', BLUE: 'Blue',
+  'FOTOCROMATICO AR': 'Fotocromático AR', 'FOTOCROMATICO INCOLOR': 'Fotocromático incolor',
+  'TRANSITIONS AR': 'Transitions AR', 'TRANSITIONS INCOLOR': 'Transitions incolor',
+}
 const rotuloIndice = (i) => Number(i).toFixed(2).replace('.', ',')
 
 // Busca por nome: cada palavra digitada precisa casar com o início de alguma palavra da lente
 const normalizar = (t) => String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
-const APELIDOS = { FOTOCROMATICO: 'foto fotocromatica fotossensivel', TRANSITIONS: 'transitions trans', BLUE: 'blue azul filtro', 'BLUE AR': 'blue azul filtro ar antirreflexo', 'BLUE INCOLOR': 'blue azul incolor', AR: 'ar antirreflexo' }
+const APELIDOS = {
+  'FOTOCROMATICO AR': 'foto fotocromatica fotossensivel ar antirreflexo', 'FOTOCROMATICO INCOLOR': 'foto fotocromatica fotossensivel incolor',
+  'TRANSITIONS AR': 'transitions trans ar antirreflexo', 'TRANSITIONS INCOLOR': 'transitions trans incolor',
+  'BLUE AR': 'blue azul filtro ar antirreflexo', 'BLUE INCOLOR': 'blue azul filtro incolor', AR: 'ar antirreflexo',
+}
 function textoBusca(l) {
   const a = l.atributos || {}
   const ind = Number(a.indice)
@@ -161,7 +170,7 @@ function LenteSelector({ lentes, value, onChange, cor }) {
         <div className="flex flex-col gap-2">
           <span className="text-sm font-medium text-muted">Tratamento</span>
           <Chips label="Tratamento" value={sel.tratamento} onChange={(v) => escolher('tratamento', v)}
-            options={trats.map((t) => ({ value: t, label: t.charAt(0) + t.slice(1).toLowerCase() }))} />
+            options={trats.map((t) => ({ value: t, label: ROTULO_TRAT[t] || t }))} />
         </div>
       )}
       {value && (

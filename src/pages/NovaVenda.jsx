@@ -255,10 +255,41 @@ export default function NovaVenda() {
       irPara(2)
     }
   }
+  // Navegação livre pelas etapas (sem trava): ao sair da etapa 1, tenta salvar o cliente em segundo plano
+  const irParaEtapa = async (i) => {
+    if (i === passo || (i === 1 && !gerarOS)) return
+    if (passo === 0 && fichaRef.current) {
+      const c = await fichaRef.current.salvar({ silencioso: true })
+      if (c) setCliente(c)
+    }
+    irPara(i)
+  }
+
+  // Tudo o que antes travava as etapas é conferido na confirmação; leva direto ao que falta
+  const conferirTudo = () => {
+    if (!cliente?.id) { setErroSalvar('Falta salvar o cliente: volte à etapa 1 e confira os campos obrigatórios.'); irPara(0); return false }
+    if (!gerarOS) return true
+    const ec = Object.fromEntries(letras.filter((l) => l !== 'A' && !vinculados[l]).map((l) => [l, 'Escolha ou cadastre o cliente desta OS']))
+    setErrosCliente(ec)
+    const todos = Object.fromEntries(osList.map((o) => [chave(o), validarOS(efetiva(o, osList), osSimples(tipo, garantiaDe) ? 'SIMPLES' : tipo)]))
+    setErrosOS(todos)
+    const semCliente = letras.find((l) => ec[l])
+    const comErro = osList.find((o) => Object.keys(todos[chave(o)]).length)
+    if (semCliente || comErro) {
+      setErroSalvar('Há campos obrigatórios pendentes nas ordens de serviço.')
+      setAtiva(semCliente ? `${semCliente}1` : chave(comErro))
+      irPara(1)
+      return false
+    }
+    return true
+  }
+
   // volta uma etapa mantendo tudo o que já foi preenchido
   const voltar = () => window.history.back()
 
   const confirmar = async () => {
+    setErroSalvar(null)
+    if (!conferirTudo()) return
     if (itens.length === 0 && !(gerarOS && SEM_ITEM_OK.includes(tipo))) { setErroSalvar('Adicione pelo menos um item à venda.'); return }
     setSalvando(true); setErroSalvar(null)
     const descDe = (key) => itens.find((i) => i.key === key)?.desconto || 0
@@ -318,12 +349,15 @@ export default function NovaVenda() {
           const pulado = i === 1 && !gerarOS
           const feito = i < passo && !pulado
           return (
-            <li key={p} className={cx('flex flex-col gap-2', pulado && 'opacity-40')} aria-current={i === passo ? 'step' : undefined}>
-              <span className={cx('h-1 rounded-full', i <= passo && !pulado ? 'bg-brand' : 'bg-line')} />
-              <span className={cx('flex items-center gap-2 text-sm', i === passo ? 'font-semibold text-ink' : 'text-muted')}>
-                {feito ? <Check className="h-4 w-4 text-brand" aria-hidden /> : <span className="num">{i + 1}.</span>}
-                <span className="hidden sm:inline">{p}</span>
-              </span>
+            <li key={p} className={cx(pulado && 'opacity-40')} aria-current={i === passo ? 'step' : undefined}>
+              <button type="button" disabled={pulado} onClick={() => irParaEtapa(i)}
+                className="group flex w-full flex-col gap-2 rounded-md text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-brand/40 disabled:cursor-not-allowed">
+                <span className={cx('h-1 w-full rounded-full transition-colors', i <= passo && !pulado ? 'bg-brand' : 'bg-line group-hover:bg-brand/40')} />
+                <span className={cx('flex items-center gap-2 text-sm', i === passo ? 'font-semibold text-ink' : 'text-muted group-hover:text-ink')}>
+                  {feito ? <Check className="h-4 w-4 text-brand" aria-hidden /> : <span className="num">{i + 1}.</span>}
+                  <span className="hidden sm:inline">{p}</span>
+                </span>
+              </button>
             </li>
           )
         })}
