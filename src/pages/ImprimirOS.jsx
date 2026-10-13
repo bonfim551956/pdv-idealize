@@ -36,6 +36,7 @@ function Cabecalho({ venda, ordens, via, compacto }) {
             <p className="text-[10px] font-bold text-[#16272B]">{l.nome}</p>
             {l.endereco && <p>{l.endereco}</p>}
             <p>{[l.telefone && `Tel. ${l.telefone}`, l.whatsapp && `WhatsApp ${l.whatsapp}`].filter(Boolean).join(' · ')}</p>
+            {l.cnpj && <p>{[l.razao_social, `CNPJ ${l.cnpj}`].filter(Boolean).join(' · ')}</p>}
           </div>
         )}
         {compacto && <p className="text-[9px] font-bold">{l.nome}</p>}
@@ -486,7 +487,7 @@ export default function ImprimirOS() {
       id, numero, data_venda, observacoes, campos_extras, total_bruto, total_desconto, total_liquido,
       cliente:clientes(id, nome, documento, contatos:cliente_contatos(tipo, valor, principal)),
       vendedor:colaboradores!vendas_vendedor_id_fkey(nome),
-      loja:lojas(nome, cidade, endereco, telefone, whatsapp, cnpj),
+      loja:lojas(nome, cidade, endereco, telefone, whatsapp, cnpj, razao_social),
       itens:itens_venda(descricao, sku, olho, quantidade, preco_unitario, desconto, total, os_id),
       ordens:ordens_servico(id, numero, letra, oculos, data_receita, previsao_entrega, iniciais, observacoes, aviso_entrega,
         paciente_id, paciente:clientes(id, nome, documento, contatos:cliente_contatos(valor, principal)), laboratorio:laboratorios(nome),
