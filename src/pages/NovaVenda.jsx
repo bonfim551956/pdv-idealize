@@ -93,6 +93,8 @@ function validarOS(os, tipo) {
 }
 
 const nOuNull = (v) => { const n = parseNum(v); return n === null || Number.isNaN(n) ? null : n }
+const valorDe = (v) => Math.max(0, nOuNull(v) ?? 0)
+const soValor = (v) => v.replace(/[^\d,.]/g, '')
 
 export default function NovaVenda() {
   const { perfil } = useAuth()
@@ -170,9 +172,9 @@ export default function NovaVenda() {
     const doOS = gerarOS ? osList.flatMap(itensDaOS) : []
     const gratis = SEM_COBRANCA.includes(tipo)
     return [...doOS, ...extras].map((it) => {
-      const unit = it.produto.tipo === 'servico' ? Number(precos[it.key] || 0) : Number(it.produto.preco)
+      const unit = it.produto.tipo === 'servico' ? valorDe(precos[it.key]) : Number(it.produto.preco)
       const bruto = gratis ? 0 : unit * it.quantidade
-      const desc = Math.min(Number(descontos[it.key] || 0), bruto)
+      const desc = Math.min(valorDe(descontos[it.key]), bruto)
       return { ...it, bruto, desconto: desc, total: bruto - desc }
     })
   }, [osList, extras, descontos, gerarOS, tipo, precos])
@@ -281,7 +283,7 @@ export default function NovaVenda() {
         },
         itens: itensDaOS(os).map((i) => ({ produto_id: i.produto.id, olho: i.olho, quantidade: i.quantidade, desconto: descDe(i.key) })),
       })) : [],
-      itens: extras.map((i) => ({ produto_id: i.produto.id, quantidade: i.quantidade, desconto: descDe(i.key), preco: i.produto.tipo === 'servico' ? Number(precos[i.key] || 0) : undefined })),
+      itens: extras.map((i) => ({ produto_id: i.produto.id, quantidade: i.quantidade, desconto: descDe(i.key), preco: i.produto.tipo === 'servico' ? valorDe(precos[i.key]) : undefined })),
     }
     const { data, error } = await supabase.rpc('criar_venda', { p: payload })
     setSalvando(false)
@@ -461,19 +463,13 @@ export default function NovaVenda() {
                               <td className="py-3 pr-3 text-right num">
                                 {i.produto.tipo === 'servico' && !SEM_COBRANCA.includes(tipo) ? (
                                   <Input aria-label={`Valor ${i.produto.nome}`} inputMode="decimal" className="num h-10 w-28 text-right" placeholder="0,00"
-                                    value={precos[i.key] ?? ''} onChange={(e) => {
-                                      const v = parseNum(e.target.value)
-                                      setPrecos((p) => ({ ...p, [i.key]: v === null || Number.isNaN(v) ? '' : Math.max(0, v) }))
-                                    }} />
+                                    value={precos[i.key] ?? ''} onChange={(e) => setPrecos((p) => ({ ...p, [i.key]: soValor(e.target.value) }))} />
                                 ) : brl(i.bruto / i.quantidade)}
                               </td>
                               <td className="py-3 pr-3">
                                 <Input aria-label={`Desconto ${i.produto.nome}`} inputMode="decimal" className="num h-10 w-28"
                                   disabled={i.bruto === 0} value={descontos[i.key] ?? ''}
-                                  onChange={(e) => {
-                                    const v = parseNum(e.target.value)
-                                    setDescontos((d) => ({ ...d, [i.key]: v === null || Number.isNaN(v) ? '' : Math.max(0, v) }))
-                                  }} placeholder="0,00" />
+                                  onChange={(e) => setDescontos((d) => ({ ...d, [i.key]: soValor(e.target.value) }))} placeholder="0,00" />
                               </td>
                               <td className="py-3 text-right num font-semibold">{brl(i.total)}</td>
                               <td className="py-3 pl-2">

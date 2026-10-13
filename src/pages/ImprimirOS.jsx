@@ -144,22 +144,48 @@ function Recorte() {
   )
 }
 
+/* Parte de cada cliente na venda: itens das OS dele e pagamentos feitos por ele.
+   Venda com um só cliente usa os totais da venda inteira. */
+function clientesDaVenda(venda) {
+  return [...new Set([venda.cliente.id, ...venda.ordens.map((o) => o.paciente_id)].filter(Boolean))]
+}
+function parteDoCliente(venda, clienteId) {
+  const ativos = venda.recebimentos.filter((r) => r.status === 'ativo')
+  const pagoVenda = ativos.reduce((t, r) => t + Number(r.valor), 0)
+  const saldoVenda = Number(venda.total_liquido) - pagoVenda
+  if (clientesDaVenda(venda).length <= 1 || !clienteId) {
+    return { total: Number(venda.total_liquido), desconto: Number(venda.total_desconto), pagamentos: ativos, saldo: saldoVenda, itens: venda.itens }
+  }
+  const principal = venda.cliente.id
+  const pacienteDaOS = Object.fromEntries(venda.ordens.map((o) => [o.id, o.paciente_id]))
+  const itens = venda.itens.filter((i) => (i.os_id ? pacienteDaOS[i.os_id] : principal) === clienteId)
+  const total = itens.reduce((t, i) => t + Number(i.total), 0)
+  const desconto = itens.reduce((t, i) => t + Number(i.desconto || 0), 0)
+  const pagamentos = ativos.filter((r) => (r.pagador_id || principal) === clienteId)
+  const pago = pagamentos.reduce((t, r) => t + Number(r.valor), 0)
+  // se a venda já está quitada (alguém pagou por todos), ninguém fica com saldo
+  const saldo = saldoVenda <= 0.004 ? 0 : Math.max(0, total - pago)
+  return { total, desconto, pagamentos, saldo, itens }
+}
+
 /* ---------- vias ---------- */
 function ViaLoja({ venda, os }) {
-  const contato = venda.cliente.contatos?.find((c) => c.principal) || venda.cliente.contatos?.[0]
-  const itens = venda.itens.filter((i) => i.os_id === os.id || !i.os_id)
-  const ativos = venda.recebimentos.filter((r) => r.status === 'ativo')
-  const recebido = ativos.reduce((s, r) => s + Number(r.valor), 0)
-  const saldo = Number(venda.total_liquido) - recebido
+  const vinculado = os.paciente && os.paciente.id !== venda.cliente.id
+  const cli = vinculado ? os.paciente : venda.cliente
+  const contato = cli.contatos?.find((c) => c.principal) || cli.contatos?.[0]
+  const parte = parteDoCliente(venda, os.paciente_id)
+  const itens = parte.itens.filter((i) => i.os_id === os.id || !i.os_id)
+  const ativos = parte.pagamentos
+  const saldo = parte.saldo
   return (
     <section className="flex h-[122mm] flex-col gap-[2.5mm] overflow-hidden">
       <Cabecalho venda={venda} ordens={[os]} via="Via da loja" />
       <div className="grid grid-cols-[1.4fr_1fr_1fr_1fr] gap-[3mm]">
-        <Dado rotulo="Cliente" forte>{venda.cliente.nome}</Dado>
-        <Dado rotulo="CPF">{cpf(venda.cliente.documento)}</Dado>
+        <Dado rotulo="Cliente" forte>{cli.nome}</Dado>
+        <Dado rotulo="CPF">{cpf(cli.documento)}</Dado>
         <Dado rotulo="Contato">{fone(contato?.valor)}</Dado>
         <Dado rotulo="Consultor">{venda.vendedor.nome}</Dado>
-        <Dado rotulo="Paciente">{os.paciente?.nome}</Dado>
+        <Dado rotulo={vinculado ? 'Vinculado a' : 'Paciente'}>{vinculado ? venda.cliente.nome : os.paciente?.nome}</Dado>
         <Dado rotulo="Meio de contato">{venda.campos_extras?.meio_contato}</Dado>
         <Dado rotulo="Data de retirada" forte>{dataBR(os.previsao_entrega)}</Dado>
         <Dado rotulo="Avisar por">{AVISO[os.aviso_entrega]}</Dado>
@@ -179,8 +205,8 @@ function ViaLoja({ venda, os }) {
         </div>
         <div className="leading-snug">
           <Rotulo>Pagamento</Rotulo>
-          {Number(venda.total_desconto) > 0 && <p className="flex justify-between"><span>Desconto</span><span className="num">− {brl(venda.total_desconto)}</span></p>}
-          <p className="flex justify-between font-bold"><span>Total</span><span className="num">{brl(venda.total_liquido)}</span></p>
+          {parte.desconto > 0 && <p className="flex justify-between"><span>Desconto</span><span className="num">− {brl(parte.desconto)}</span></p>}
+          <p className="flex justify-between font-bold"><span>Total</span><span className="num">{brl(parte.total)}</span></p>
           {ativos.slice(0, 3).map((r, k) => (
             <p key={k} className="flex justify-between text-[#4E6468]">
               <span className="truncate">{FORMAS[r.forma]}{r.forma === 'CARTAO' ? ` ${r.modalidade === 'DEBITO' ? 'déb.' : `${r.parcelas}x`}` : ''}{r.detalhe?.length > 1 ? ` ${r.detalhe.length}x` : ''}</span>
@@ -235,10 +261,9 @@ function linkWhatsApp(numero, os) {
   return `https://wa.me/${d}?text=${encodeURIComponent(`Olá! Sou cliente da Óticas Idealize, OS ${os}.`)}`
 }
 
-function ViaClienteBase({ venda, numeroOS, detalhe, retirada, altura }) {
+function ViaClienteBase({ venda, clienteId, numeroOS, detalhe, retirada, altura }) {
   const l = venda.loja
-  const pago = venda.recebimentos.filter((r) => r.status === 'ativo').reduce((t, r) => t + Number(r.valor), 0)
-  const saldo = Number(venda.total_liquido) - pago
+  const { total, saldo } = parteDoCliente(venda, clienteId)
   const link = linkWhatsApp(l.whatsapp, numeroOS)
   const corExata = { printColorAdjust: 'exact', WebkitPrintColorAdjust: 'exact' }
   return (
@@ -261,7 +286,7 @@ function ViaClienteBase({ venda, numeroOS, detalhe, retirada, altura }) {
         </div>
         <div>
           <Rotulo>Valor da compra</Rotulo>
-          <p className="num text-[12px] font-bold">{brl(venda.total_liquido)}</p>
+          <p className="num text-[12px] font-bold">{brl(total)}</p>
         </div>
         <div>
           <Rotulo>Data da compra</Rotulo>
@@ -287,7 +312,7 @@ function ViaClienteBase({ venda, numeroOS, detalhe, retirada, altura }) {
 }
 
 function ViaCliente({ venda, os }) {
-  return <ViaClienteBase venda={venda} numeroOS={os.numero} retirada={os.previsao_entrega} altura="40mm" />
+  return <ViaClienteBase venda={venda} clienteId={os.paciente_id} numeroOS={`${os.numero}-${os.letra}`} retirada={os.previsao_entrega} altura="40mm" />
 }
 
 /* ---------- várias OS na mesma impressão ---------- */
@@ -392,11 +417,20 @@ function ViaLabVarias({ venda, ordens }) {
   )
 }
 
+// Um canhoto por cliente, cada um com as próprias OS e o próprio valor
 function ViaClienteVarias({ venda, ordens }) {
-  const retirada = ordens.map((o) => o.previsao_entrega).sort().at(-1)
-  const numero = [...new Set(ordens.map((o) => o.numero))].join(' · ')
-  const detalhe = `(${[...new Set(ordens.map((o) => o.letra))].join(', ')} · ${ordens.length} óculos)`
-  return <ViaClienteBase venda={venda} numeroOS={numero} detalhe={detalhe} retirada={retirada} altura="36mm" />
+  const porCliente = [...new Set(ordens.map((o) => o.letra))].map((letra) => ordens.filter((o) => o.letra === letra))
+  return (
+    <div className="flex flex-col gap-[2mm]">
+      {porCliente.map((grupo) => {
+        const o = grupo[0]
+        const retirada = grupo.map((x) => x.previsao_entrega).sort().at(-1)
+        const detalhe = porCliente.length > 1 ? `· ${o.paciente?.nome?.split(' ')[0] || ''}${grupo.length > 1 ? ` · ${grupo.length} óculos` : ''}` : (grupo.length > 1 ? `· ${grupo.length} óculos` : '')
+        return <ViaClienteBase key={o.letra} venda={venda} clienteId={porCliente.length > 1 ? o.paciente_id : null}
+          numeroOS={`${o.numero}-${o.letra}`} detalhe={detalhe} retirada={retirada} altura={porCliente.length > 1 ? '32mm' : '36mm'} />
+      })}
+    </div>
+  )
 }
 
 /* Monta as folhas: tenta tudo numa A4; se não couber, a via da loja + cliente vão
@@ -450,16 +484,16 @@ export default function ImprimirOS() {
   useEffect(() => {
     supabase.from('vendas').select(`
       id, numero, data_venda, observacoes, campos_extras, total_bruto, total_desconto, total_liquido,
-      cliente:clientes(nome, documento, contatos:cliente_contatos(tipo, valor, principal)),
+      cliente:clientes(id, nome, documento, contatos:cliente_contatos(tipo, valor, principal)),
       vendedor:colaboradores!vendas_vendedor_id_fkey(nome),
       loja:lojas(nome, cidade, endereco, telefone, whatsapp, cnpj),
       itens:itens_venda(descricao, sku, olho, quantidade, preco_unitario, desconto, total, os_id),
       ordens:ordens_servico(id, numero, letra, oculos, data_receita, previsao_entrega, iniciais, observacoes, aviso_entrega,
-        paciente:clientes(nome), laboratorio:laboratorios(nome),
+        paciente_id, paciente:clientes(id, nome, documento, contatos:cliente_contatos(valor, principal)), laboratorio:laboratorios(nome),
         receitas(olho, esferico_longe, cilindrico, eixo, adicao, esferico_perto, prisma, prisma_base),
         armacao:os_armacao(mha, mva, ponte, dma, tipo, modelo_desenho, enviar_montagem, clipon, produto:produtos(sku, nome)),
         lentes:os_lentes(olho, dnp, altura, produto:produtos(sku, nome))),
-      recebimentos(forma, valor, modalidade, parcelas, bandeira, status, detalhe:recebimento_parcelas(numero, valor, vencimento, documento))
+      recebimentos(forma, valor, modalidade, parcelas, bandeira, status, pagador_id, detalhe:recebimento_parcelas(numero, valor, vencimento, documento))
     `).eq('id', id).single().then(({ data, error }) => {
       if (error) setErro(mensagemErro(error))
       else setVenda({ ...data, ordens: [...data.ordens].sort((a, b) => a.letra.localeCompare(b.letra) || a.oculos - b.oculos) })
