@@ -5,6 +5,7 @@ import { supabase, mensagemErro } from '../lib/supabase'
 import { brl, dataBR, dataHoraBR, grau } from '../lib/format'
 import { Button, Spinner, Alert, cx } from '../components/ui'
 import { FORMAS } from '../features/recebimento/RecebimentoForm'
+import { QRCodeSVG } from 'qrcode.react'
 
 /*
   Folha A4 única com as 3 vias (loja, laboratório e cliente), separadas por linha de recorte.
@@ -127,7 +128,7 @@ function LenteArmacao({ os }) {
         <Rotulo>Armação</Rotulo>
         <p><b>{a?.produto ? a.produto.nome : 'Armação do cliente'}</b>{a?.produto && <span className="text-[#4E6468]"> · {a.produto.sku}</span>}</p>
         <p className="num text-[#4E6468]">
-          {[medidas, TIPO_ARO[a?.tipo], a?.modelo_desenho, a?.enviar_montagem ? 'enviar p/ montagem' : 'sem montagem', a?.clipon && 'clip-on'].filter(Boolean).join(' · ')}
+          {[medidas, TIPO_ARO[a?.tipo], a?.modelo_desenho].filter(Boolean).join(' · ')}
         </p>
       </div>
     </div>
@@ -226,29 +227,41 @@ function ViaLaboratorio({ venda, os }) {
   )
 }
 
-function ViaCliente({ venda, os }) {
+// Link de WhatsApp da loja (wa.me) com a OS já na mensagem
+function linkWhatsApp(numero, os) {
+  let d = (numero || '').replace(/\D/g, '')
+  if (!d) return null
+  if (d.length <= 11) d = `55${d}`
+  return `https://wa.me/${d}?text=${encodeURIComponent(`Olá! Sou cliente da Óticas Idealize, OS ${os}.`)}`
+}
+
+function ViaClienteBase({ venda, numeroOS, detalhe, retirada, altura }) {
   const l = venda.loja
+  const pago = venda.recebimentos.filter((r) => r.status === 'ativo').reduce((t, r) => t + Number(r.valor), 0)
+  const saldo = Number(venda.total_liquido) - pago
+  const link = linkWhatsApp(l.whatsapp, numeroOS)
+  const corExata = { printColorAdjust: 'exact', WebkitPrintColorAdjust: 'exact' }
   return (
-    <section className="flex h-[40mm] items-stretch gap-[5mm] overflow-hidden rounded-[2mm] border border-[#D2DEDF]">
+    <section className="flex items-stretch gap-[4mm] overflow-hidden rounded-[2mm] border border-[#D2DEDF]" style={{ height: altura }}>
       {/* Faixa laranja: o traço vertical da logo */}
-      <span className="w-[2mm] shrink-0 bg-[#FC9E3C]" style={{ printColorAdjust: 'exact', WebkitPrintColorAdjust: 'exact' }} />
-      <div className="flex w-[62mm] shrink-0 flex-col justify-center gap-[1.5mm] py-[3mm]">
-        <img src="/logo.png" alt="Óticas Idealize" className="h-[10mm] w-auto self-start" />
+      <span className="w-[2mm] shrink-0 bg-[#FC9E3C]" style={corExata} />
+      <div className="flex w-[54mm] shrink-0 flex-col justify-center gap-[1.5mm] py-[2.5mm]">
+        <img src="/logo.png" alt="Óticas Idealize" className="h-[9mm] w-auto self-start" />
         <div className="text-[9px] leading-tight text-[#4E6468]">
           <p className="font-bold text-[#16272B]">{l.nome}</p>
           {l.endereco && <p>{l.endereco}</p>}
+          {l.whatsapp && <p className="mt-[0.5mm] text-[10px] font-bold text-[#16272B]">WhatsApp {l.whatsapp}</p>}
           {l.telefone && <p>Tel. {l.telefone}</p>}
-          {l.whatsapp && <p>WhatsApp {l.whatsapp}</p>}
         </div>
       </div>
-      <div className="grid flex-1 grid-cols-2 content-center gap-x-[5mm] gap-y-[2.5mm] py-[3mm] pr-[5mm]">
-        <div>
+      <div className="grid flex-1 grid-cols-3 content-center gap-x-[4mm] gap-y-[2mm] py-[2.5mm]">
+        <div className="col-span-2">
           <p className="text-[8px] font-bold uppercase tracking-wider text-[#0B6E71]">Via do cliente</p>
-          <p className="num font-display text-[15px] font-extrabold leading-tight">OS {os.numero}</p>
+          <p className="num font-display text-[15px] font-extrabold leading-tight">OS {numeroOS} {detalhe && <span className="text-[10px] font-bold">{detalhe}</span>}</p>
         </div>
         <div>
           <Rotulo>Valor da compra</Rotulo>
-          <p className="num font-display text-[15px] font-extrabold leading-tight">{brl(venda.total_liquido)}</p>
+          <p className="num text-[12px] font-bold">{brl(venda.total_liquido)}</p>
         </div>
         <div>
           <Rotulo>Data da compra</Rotulo>
@@ -256,11 +269,25 @@ function ViaCliente({ venda, os }) {
         </div>
         <div>
           <Rotulo>Data de retirada</Rotulo>
-          <p className="num text-[12px] font-bold">{dataBR(os.previsao_entrega)}</p>
+          <p className="num text-[12px] font-bold">{dataBR(retirada)}</p>
+        </div>
+        <div className="rounded-[1mm] bg-[#FEF1E2] px-[1.5mm] py-[0.5mm]" style={corExata}>
+          <Rotulo>Saldo na retirada</Rotulo>
+          <p className="num font-display text-[13px] font-extrabold leading-tight">{saldo > 0.004 ? brl(saldo) : 'Quitado'}</p>
         </div>
       </div>
+      {link && (
+        <div className="flex w-[24mm] shrink-0 flex-col items-center justify-center gap-[1mm] pr-[3mm]">
+          <QRCodeSVG value={link} size={72} level="M" marginSize={0} fgColor="#16272B" bgColor="#FAFAFA" style={{ width: '20mm', height: '20mm' }} />
+          <p className="text-center text-[7px] leading-tight text-[#4E6468]">Aponte a câmera e fale com a loja</p>
+        </div>
+      )}
     </section>
   )
+}
+
+function ViaCliente({ venda, os }) {
+  return <ViaClienteBase venda={venda} numeroOS={os.numero} retirada={os.previsao_entrega} altura="40mm" />
 }
 
 /* ---------- várias OS na mesma impressão ---------- */
@@ -366,39 +393,10 @@ function ViaLabVarias({ venda, ordens }) {
 }
 
 function ViaClienteVarias({ venda, ordens }) {
-  const l = venda.loja
   const retirada = ordens.map((o) => o.previsao_entrega).sort().at(-1)
-  return (
-    <section className="flex h-[34mm] items-stretch gap-[5mm] overflow-hidden rounded-[2mm] border border-[#D2DEDF]">
-      <span className="w-[2mm] shrink-0 bg-[#FC9E3C]" style={{ printColorAdjust: 'exact', WebkitPrintColorAdjust: 'exact' }} />
-      <div className="flex w-[62mm] shrink-0 flex-col justify-center gap-[1mm] py-[2mm]">
-        <img src="/logo.png" alt="Óticas Idealize" className="h-[8mm] w-auto self-start" />
-        <div className="text-[9px] leading-tight text-[#4E6468]">
-          <p className="font-bold text-[#16272B]">{l.nome}</p>
-          {l.endereco && <p>{l.endereco}</p>}
-          {(l.telefone || l.whatsapp) && <p>{[l.telefone && `Tel. ${l.telefone}`, l.whatsapp && `WhatsApp ${l.whatsapp}`].filter(Boolean).join(' · ')}</p>}
-        </div>
-      </div>
-      <div className="grid flex-1 grid-cols-2 content-center gap-x-[5mm] gap-y-[2mm] py-[2mm] pr-[5mm]">
-        <div>
-          <p className="text-[8px] font-bold uppercase tracking-wider text-[#0B6E71]">Via do cliente</p>
-          <p className="num font-display text-[14px] font-extrabold leading-tight">OS {[...new Set(ordens.map((o) => o.numero))].join(' · ')} <span className="text-[10px] font-bold">({[...new Set(ordens.map((o) => o.letra))].join(', ')} · {ordens.length} óculos)</span></p>
-        </div>
-        <div>
-          <Rotulo>Valor da compra</Rotulo>
-          <p className="num font-display text-[14px] font-extrabold leading-tight">{brl(venda.total_liquido)}</p>
-        </div>
-        <div>
-          <Rotulo>Data da compra</Rotulo>
-          <p className="num text-[11px] font-bold">{dataBR(venda.data_venda)}</p>
-        </div>
-        <div>
-          <Rotulo>Data de retirada</Rotulo>
-          <p className="num text-[11px] font-bold">{dataBR(retirada)}</p>
-        </div>
-      </div>
-    </section>
-  )
+  const numero = [...new Set(ordens.map((o) => o.numero))].join(' · ')
+  const detalhe = `(${[...new Set(ordens.map((o) => o.letra))].join(', ')} · ${ordens.length} óculos)`
+  return <ViaClienteBase venda={venda} numeroOS={numero} detalhe={detalhe} retirada={retirada} altura="36mm" />
 }
 
 /* Monta as folhas: tenta tudo numa A4; se não couber, a via da loja + cliente vão

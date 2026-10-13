@@ -241,10 +241,6 @@ export default function OSForm({ os, base, onChange, lentes, armacoes, laborator
               {({ id }) => <Input id={id} value={os.armacao.modelo_desenho} onChange={(e) => setArm({ modelo_desenho: e.target.value })} />}
             </Field>
           </div>
-          <div className="flex flex-wrap gap-6">
-            <Switch checked={os.armacao.enviar_montagem} onCheckedChange={(v) => setArm({ enviar_montagem: v })} label="Enviar para montagem" />
-            <Switch checked={os.armacao.clipon} onCheckedChange={(v) => setArm({ clipon: v })} label="Clip-on" />
-          </div>
         </div>
       </Section>
 

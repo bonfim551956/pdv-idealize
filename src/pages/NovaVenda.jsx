@@ -17,7 +17,9 @@ const TIPOS_VENDA = [
   { value: 'GARANTIA', label: 'Garantia', descricao: 'Sem cobrança e sem saldo' },
   { value: 'GARANTIA_VALOR', label: 'Garantia com valor', descricao: 'Garantia com cobrança parcial' },
   { value: 'CORTESIA', label: 'Cortesia', descricao: 'Sem cobrança e sem saldo' },
+  { value: 'CONSERTO', label: 'Conserto', descricao: 'Serviço, com ou sem cobrança' },
 ]
+const SEM_ITEM_OK = ['CONSERTO', 'GARANTIA', 'CORTESIA'] // podem ser confirmadas só com a OS
 const SEM_COBRANCA = ['GARANTIA', 'CORTESIA']
 const LETRAS = 'ABCDEFGH'
 const MAX_OCULOS = 6
@@ -55,9 +57,20 @@ function itensDaOS(os) {
   return out
 }
 
-function validarOS(os) {
+function validarOS(os, tipo) {
   const e = {}
   if (!os.previsao_entrega) e.previsao_entrega = 'Informe a data de retirada'
+  if (tipo === 'CONSERTO') {
+    // conserto: receita, lente e armação são opcionais; se tiver lente, DNP e altura continuam obrigatórias
+    for (const o of ['OD', 'OE']) {
+      if (!os.lentes[o].produto) continue
+      if (parseNum(os.lentes[o].dnp) === null) e[`dnp${o}`] = 'Obrigatória'
+      if (parseNum(os.lentes[o].altura) === null) e[`altura${o}`] = 'Obrigatória'
+    }
+    if (Object.keys(validarOlho(os.receita.OD)).length || Object.keys(validarOlho(os.receita.OE)).length) e.receita = 'Corrija os campos destacados na receita.'
+    else if (Object.keys(e).some((k) => k.startsWith('dnp') || k.startsWith('altura'))) e.receita = 'Informe DNP e altura ao lado da receita.'
+    return e
+  }
   const temErro = ['OD', 'OE'].some((o) => Object.keys(validarOlho(os.receita[o])).length)
   if (temErro) e.receita = 'Corrija os campos destacados na receita.'
   else if (!olhoTemDados(os.receita.OD) && !olhoTemDados(os.receita.OE)) e.receita = 'Preencha a receita de pelo menos um olho.'
@@ -104,6 +117,7 @@ export default function NovaVenda() {
   const [errosCliente, setErrosCliente] = useState({})
   const [descontos, setDescontos] = useState({})
   const [extras, setExtras] = useState([])
+  const [precos, setPrecos] = useState({}) // valor digitado para serviços (ex.: conserto)
   const [buscaExtra, setBuscaExtra] = useState('')
   const [erros, setErros] = useState({})
   const [errosOS, setErrosOS] = useState({})
@@ -156,11 +170,12 @@ export default function NovaVenda() {
     const doOS = gerarOS ? osList.flatMap(itensDaOS) : []
     const gratis = SEM_COBRANCA.includes(tipo)
     return [...doOS, ...extras].map((it) => {
-      const bruto = gratis ? 0 : Number(it.produto.preco) * it.quantidade
+      const unit = it.produto.tipo === 'servico' ? Number(precos[it.key] || 0) : Number(it.produto.preco)
+      const bruto = gratis ? 0 : unit * it.quantidade
       const desc = Math.min(Number(descontos[it.key] || 0), bruto)
       return { ...it, bruto, desconto: desc, total: bruto - desc }
     })
-  }, [osList, extras, descontos, gerarOS, tipo])
+  }, [osList, extras, descontos, gerarOS, tipo, precos])
   const totais = itens.reduce((a, i) => ({ bruto: a.bruto + i.bruto, desc: a.desc + i.desconto, total: a.total + i.total }), { bruto: 0, desc: 0, total: 0 })
 
   const resExtras = useMemo(() => {
@@ -220,7 +235,7 @@ export default function NovaVenda() {
     } else if (passo === 1) {
       const ec = Object.fromEntries(letras.filter((l) => l !== 'A' && !vinculados[l]).map((l) => [l, 'Escolha ou cadastre o cliente desta OS']))
       setErrosCliente(ec)
-      const todos = Object.fromEntries(osList.map((o) => [chave(o), validarOS(efetiva(o, osList))]))
+      const todos = Object.fromEntries(osList.map((o) => [chave(o), validarOS(efetiva(o, osList), tipo)]))
       setErrosOS(todos)
       const semCliente = letras.find((l) => ec[l])
       const comErro = osList.find((o) => Object.keys(todos[chave(o)]).length)
@@ -233,7 +248,7 @@ export default function NovaVenda() {
   const voltar = () => window.history.back()
 
   const confirmar = async () => {
-    if (itens.length === 0) { setErroSalvar('Adicione pelo menos um item à venda.'); return }
+    if (itens.length === 0 && !(gerarOS && SEM_ITEM_OK.includes(tipo))) { setErroSalvar('Adicione pelo menos um item à venda.'); return }
     setSalvando(true); setErroSalvar(null)
     const descDe = (key) => itens.find((i) => i.key === key)?.desconto || 0
     const payload = {
@@ -266,7 +281,7 @@ export default function NovaVenda() {
         },
         itens: itensDaOS(os).map((i) => ({ produto_id: i.produto.id, olho: i.olho, quantidade: i.quantidade, desconto: descDe(i.key) })),
       })) : [],
-      itens: extras.map((i) => ({ produto_id: i.produto.id, quantidade: i.quantidade, desconto: descDe(i.key) })),
+      itens: extras.map((i) => ({ produto_id: i.produto.id, quantidade: i.quantidade, desconto: descDe(i.key), preco: i.produto.tipo === 'servico' ? Number(precos[i.key] || 0) : undefined })),
     }
     const { data, error } = await supabase.rpc('criar_venda', { p: payload })
     setSalvando(false)
@@ -281,7 +296,7 @@ export default function NovaVenda() {
   return (
     <div className="mx-auto flex max-w-6xl flex-col gap-6">
       <div className="flex flex-wrap items-end justify-between gap-4">
-        <h1 className="text-xl font-bold">Nova venda</h1>
+        <h1 className="text-xl font-bold">Nova OS</h1>
         <p className="num text-lg font-semibold">{brl(totais.total)}</p>
       </div>
 
@@ -310,7 +325,7 @@ export default function NovaVenda() {
                 <div className="flex flex-col gap-4">
                   <div className="flex flex-col gap-2">
                     <span className="text-sm font-medium text-muted">Tipo de venda <span className="text-danger">*</span></span>
-                    <div role="radiogroup" aria-label="Tipo de venda" className="grid grid-cols-2 gap-2 lg:grid-cols-4">
+                    <div role="radiogroup" aria-label="Tipo de venda" className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
                       {TIPOS_VENDA.map((t) => (
                         <button key={t.value} type="button" role="radio" aria-checked={tipo === t.value} onClick={() => setTipo(t.value)}
                           className={cx('flex flex-col items-start gap-1 rounded-md border px-4 py-3 text-left transition-colors',
@@ -418,7 +433,7 @@ export default function NovaVenda() {
               <Section title="Itens do pedido">
                 <div className="flex flex-col gap-4">
                   {itens.length === 0 ? (
-                    <p className="text-sm text-muted">Nenhum item ainda. Busque um produto abaixo.</p>
+                    <p className="text-sm text-muted">{gerarOS && SEM_ITEM_OK.includes(tipo) ? 'Sem itens: a OS pode ser confirmada assim. Se houver cobrança, adicione o serviço abaixo.' : 'Nenhum item ainda. Busque um produto abaixo.'}</p>
                   ) : (
                     <div className="overflow-x-auto">
                       <table className="w-full min-w-[560px] text-left text-sm">
@@ -439,11 +454,19 @@ export default function NovaVenda() {
                                 <p className="font-medium">{i.produto.nome}</p>
                                 <p className="text-xs text-muted">
                                   {i.os || 'Avulso'}{i.olho ? ` · ${i.olho === 'AMBOS' ? 'Ambos os olhos' : i.olho}` : ''}
-                                  {Number(i.produto.preco) === 0 && <span className="text-warn"> · sem preço cadastrado</span>}
+                                  {Number(i.produto.preco) === 0 && i.produto.tipo !== 'servico' && <span className="text-warn"> · sem preço cadastrado</span>}
                                 </p>
                               </td>
                               <td className="py-3 pr-3 num">{i.quantidade}</td>
-                              <td className="py-3 pr-3 text-right num">{brl(i.bruto / i.quantidade)}</td>
+                              <td className="py-3 pr-3 text-right num">
+                                {i.produto.tipo === 'servico' && !SEM_COBRANCA.includes(tipo) ? (
+                                  <Input aria-label={`Valor ${i.produto.nome}`} inputMode="decimal" className="num h-10 w-28 text-right" placeholder="0,00"
+                                    value={precos[i.key] ?? ''} onChange={(e) => {
+                                      const v = parseNum(e.target.value)
+                                      setPrecos((p) => ({ ...p, [i.key]: v === null || Number.isNaN(v) ? '' : Math.max(0, v) }))
+                                    }} />
+                                ) : brl(i.bruto / i.quantidade)}
+                              </td>
                               <td className="py-3 pr-3">
                                 <Input aria-label={`Desconto ${i.produto.nome}`} inputMode="decimal" className="num h-10 w-28"
                                   disabled={i.bruto === 0} value={descontos[i.key] ?? ''}
@@ -465,6 +488,12 @@ export default function NovaVenda() {
                         </tbody>
                       </table>
                     </div>
+                  )}
+                  {tipo === 'CONSERTO' && !extras.some((x) => x.produto.sku === 'SERV-CONSERTO') && dados.outros.find((p) => p.sku === 'SERV-CONSERTO') && (
+                    <Button variant="secondary" size="sm" icon={Plus} className="self-start" onClick={() => {
+                      const p = dados.outros.find((x) => x.sku === 'SERV-CONSERTO')
+                      setExtras((x) => [...x, { key: `extra-${p.id}-${Date.now()}`, produto: p, quantidade: 1, olho: null }])
+                    }}>Adicionar valor do conserto</Button>
                   )}
                   <div className="flex flex-col gap-1">
                     <div className="relative max-w-md">
@@ -515,7 +544,7 @@ export default function NovaVenda() {
                   <Alert tone="ok">{TIPOS_VENDA.find((t) => t.value === tipo)?.label}: os itens entram sem cobrança e a venda não gera saldo a receber.</Alert>
                 ) : totais.total === 0 && itens.length > 0 && <Alert tone="warn">Total zerado: os produtos estão sem preço cadastrado. A venda será salva, mas não terá valor a receber.</Alert>}
                 {erroSalvar && <Alert>{erroSalvar}</Alert>}
-                <Button size="lg" onClick={confirmar} loading={salvando} icon={Check}>Confirmar venda</Button>
+                <Button size="lg" onClick={confirmar} loading={salvando} icon={Check}>{gerarOS ? 'Confirmar OS' : 'Confirmar venda'}</Button>
                 <p className="text-xs text-muted">Ao confirmar, as OS entram na fila do laboratório e você segue para o recebimento.</p>
               </aside>
             </div>

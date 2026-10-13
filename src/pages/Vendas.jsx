@@ -137,7 +137,7 @@ export default function Vendas() {
         <h1 className="text-xl font-bold">Vendas</h1>
         <div className="flex gap-2">
           {vendas?.length > 0 && <Button variant="secondary" icon={Download} onClick={exportarCSV}>Exportar</Button>}
-          <Button icon={PlusCircle} onClick={() => nav('/nova-venda')}>Nova venda</Button>
+          <Button icon={PlusCircle} onClick={() => nav('/nova-venda')}>Nova OS</Button>
         </div>
       </div>
 

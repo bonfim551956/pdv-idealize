@@ -12,7 +12,7 @@ export default function Layout({ children }) {
   const { perfil, perm, sair } = useAuth()
   const links = [
     { to: '/', label: 'Vendas', icon: ReceiptText, end: true },
-    { to: '/nova-venda', label: 'Nova venda', icon: PlusCircle },
+    { to: '/nova-venda', label: 'Nova OS', icon: PlusCircle },
     { to: '/relatorios', label: 'Relatórios', icon: BarChart3 },
     ...(perm.produtos ? [{ to: '/produtos', label: 'Lentes e preços', icon: Glasses }] : []),
     ...(perm.usuarios ? [{ to: '/usuarios', label: 'Usuários', icon: Users }] : []),
