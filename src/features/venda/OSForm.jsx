@@ -39,6 +39,63 @@ export const novaOS = (letra, oculos = 1) => ({
 const ORDEM_TRAT = ['AR', 'BLUE', 'BLUE AR', 'BLUE INCOLOR', 'FOTOCROMATICO', 'TRANSITIONS']
 const rotuloIndice = (i) => Number(i).toFixed(2).replace('.', ',')
 
+// Busca por nome: cada palavra digitada precisa casar com o início de alguma palavra da lente
+const normalizar = (t) => String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
+const APELIDOS = { FOTOCROMATICO: 'foto fotocromatica fotossensivel', TRANSITIONS: 'transitions trans', BLUE: 'blue azul filtro', 'BLUE AR': 'blue azul filtro ar antirreflexo', 'BLUE INCOLOR': 'blue azul incolor', AR: 'ar antirreflexo' }
+function textoBusca(l) {
+  const a = l.atributos || {}
+  const ind = Number(a.indice)
+  return normalizar([
+    l.nome, l.sku, a.linha, a.categoria, a.tratamento, APELIDOS[a.tratamento],
+    ind.toFixed(2), ind.toFixed(2).replace('.', ''), ind.toFixed(2).replace('.', ','),
+    ind === 1.59 ? 'poli policarbonato' : '', a.categoria === 'multifocal' ? 'multi progressiva' : 'mono visao simples',
+  ].join(' ')).split(/[^a-z0-9.,%]+/).filter(Boolean)
+}
+function BuscaLente({ lentes, onEscolher }) {
+  const [q, setQ] = useState('')
+  const [aberto, setAberto] = useState(false)
+  const [ativo, setAtivo] = useState(0)
+  const indice = useMemo(() => lentes.map((l) => ({ l, palavras: textoBusca(l) })), [lentes])
+  const termos = normalizar(q).split(/\s+/).filter(Boolean)
+  const resultados = termos.length === 0 ? [] : indice
+    .filter(({ palavras }) => termos.every((t) => palavras.some((p) => p.startsWith(t))))
+    .map(({ l }) => l)
+    .sort((a, b) => Number(a.preco) - Number(b.preco))
+    .slice(0, 8)
+  const escolher = (l) => { onEscolher(l); setQ(''); setAberto(false) }
+  const teclas = (e) => {
+    if (!resultados.length) return
+    if (e.key === 'ArrowDown') { e.preventDefault(); setAtivo((a) => Math.min(a + 1, resultados.length - 1)) }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); setAtivo((a) => Math.max(a - 1, 0)) }
+    else if (e.key === 'Enter') { e.preventDefault(); escolher(resultados[ativo] || resultados[0]) }
+    else if (e.key === 'Escape') setAberto(false)
+  }
+  return (
+    <div className="relative">
+      <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" aria-hidden />
+      <Input aria-label="Buscar lente pelo nome" className="pl-9" value={q} placeholder="Buscar lente: ex. extra 1.56 blue ar, rubi 1.67 foto, multi 70 transitions"
+        onChange={(e) => { setQ(e.target.value); setAberto(true); setAtivo(0) }} onFocus={() => setAberto(true)}
+        onBlur={() => setTimeout(() => setAberto(false), 150)} onKeyDown={teclas} />
+      {q && (
+        <button type="button" onClick={() => setQ('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted hover:text-ink" aria-label="Limpar busca"><X className="h-4 w-4" /></button>
+      )}
+      {aberto && termos.length > 0 && (
+        <ul role="listbox" className="absolute z-20 mt-1 max-h-80 w-full overflow-y-auto rounded-md border border-line bg-surface py-1 shadow-lg">
+          {resultados.length === 0 ? <li className="px-4 py-3 text-sm text-muted">Nenhuma lente encontrada.</li> : resultados.map((l, i) => (
+            <li key={l.id} role="option" aria-selected={i === ativo}>
+              <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => escolher(l)} onMouseEnter={() => setAtivo(i)}
+                className={cx('flex w-full items-center justify-between gap-4 px-4 py-2 text-left text-sm', i === ativo ? 'bg-brand-soft' : 'hover:bg-brand-soft')}>
+                <span className="font-medium">{l.nome}</span>
+                <span className={cx('num shrink-0', Number(l.preco) === 0 ? 'text-warn' : 'text-muted')}>{Number(l.preco) === 0 ? 'Sem preço' : `par ${brl(l.preco * 2)}`}</span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  )
+}
+
 function LenteSelector({ lentes, value, onChange, cor }) {
   const inicial = value
     ? { categoria: value.atributos.categoria, linha: value.atributos.linha, indice: value.atributos.indice, tratamento: value.atributos.tratamento }
@@ -72,8 +129,15 @@ function LenteSelector({ lentes, value, onChange, cor }) {
     onChange(prod || null)
   }
 
+  const escolherDaBusca = (l) => {
+    const a = l.atributos
+    setSel({ categoria: a.categoria, linha: a.linha, indice: Number(a.indice), tratamento: a.tratamento })
+    onChange(l)
+  }
+
   return (
     <div className="flex flex-col gap-4">
+      <BuscaLente lentes={lentes} onEscolher={escolherDaBusca} />
       <div className="flex flex-col gap-2">
         <span className="text-sm font-medium text-muted">Tipo</span>
         <Chips label="Tipo de lente" value={sel.categoria} onChange={(v) => escolher('categoria', v)}
