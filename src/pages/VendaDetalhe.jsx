@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link, useParams, useNavigate } from 'react-router-dom'
-import { ArrowLeft, Banknote, QrCode, Wallet, CreditCard, FileText, Receipt, Landmark, Coins, Undo2, Printer } from 'lucide-react'
+import { ArrowLeft, Banknote, QrCode, Wallet, CreditCard, FileText, Receipt, Landmark, Coins, Undo2, Printer, PackageCheck } from 'lucide-react'
 import { supabase, mensagemErro } from '../lib/supabase'
 import { brl, dataBR, dataHoraBR, grau, STATUS_OS } from '../lib/format'
-import { Button, Section, Spinner, Alert, Modal, cx, useToast } from '../components/ui'
+import { Button, Section, Spinner, Alert, Modal, Select, cx, useToast } from '../components/ui'
 import RecebimentoForm, { FORMAS } from '../features/recebimento/RecebimentoForm'
 import { StatusVenda } from './Vendas'
 
@@ -55,7 +55,7 @@ export default function VendaDetalhe() {
         id, numero, os_numero, status, tipo, data_venda, observacoes, campos_extras, loja_id, total_bruto, total_desconto, total_liquido,
         cliente:clientes(id, nome, documento), vendedor:colaboradores!vendas_vendedor_id_fkey(nome), loja:lojas(nome),
         itens:itens_venda(id, sku, descricao, olho, quantidade, preco_unitario, desconto, total, os_id),
-        ordens:ordens_servico(id, numero, letra, oculos, status, previsao_entrega, paciente_id, paciente:clientes(id, nome, documento),
+        ordens:ordens_servico(id, numero, letra, oculos, status, previsao_entrega, data_entrega, paciente_id, paciente:clientes(id, nome, documento),
           receitas(olho, esferico_longe, cilindrico, eixo, adicao, esferico_perto))
       `).eq('id', id).single(),
       supabase.from('v_venda_resumo').select('*').eq('venda_id', id).single(),
@@ -80,11 +80,21 @@ export default function VendaDetalhe() {
     carregar()
   }
 
+  // Atualiza o andamento das OS (ex.: Pronta, Na loja, Entregue). Entregue grava a data da entrega.
+  const mudarStatus = async (ids, status) => {
+    const patch = { status, ...(status === 'entregue_cliente' ? { data_entrega: new Date().toISOString() } : {}) }
+    const { error } = await supabase.from('ordens_servico').update(patch).in('id', ids)
+    if (error) { toast(mensagemErro(error), 'erro'); return }
+    toast(status === 'entregue_cliente' ? 'Pedido entregue ao cliente' : `OS: ${STATUS_OS[status]}`)
+    carregar()
+  }
+
   if (erro) return <div className="mx-auto max-w-3xl"><Alert>{erro}</Alert></div>
   if (!venda) return <Spinner />
 
   const saldo = Number(resumo.a_receber)
   const podeReceber = venda.status === 'confirmada' && saldo > 0
+  const osAbertas = venda.status === 'confirmada' ? venda.ordens.filter((o) => !['entregue_cliente', 'cancelada'].includes(o.status)) : []
   // Clientes da venda: principal + quem veio junto (OS B, C…). Base para a nota no CPF de cada um.
   const clientesVenda = [venda.cliente, ...venda.ordens.map((o) => o.paciente).filter(Boolean)]
     .filter((c, i, arr) => c && arr.findIndex((x) => x.id === c.id) === i)
@@ -247,14 +257,38 @@ export default function VendaDetalhe() {
         </Section>
       </div>
 
+      {osAbertas.length > 0 && (
+        <Section title="Entrega ao cliente">
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            {saldo > 0 ? (
+              <p className="text-sm"><span className="rounded bg-danger px-2 py-0.5 font-bold text-surface">Saldo de {brl(saldo)}</span> <span className="text-muted">— receba o saldo acima antes de entregar.</span></p>
+            ) : (
+              <p className="text-sm text-muted">{osAbertas.length === 1 ? 'A OS será marcada como entregue.' : `As ${osAbertas.length} OS desta venda serão marcadas como entregues.`}</p>
+            )}
+            <Button icon={PackageCheck} disabled={saldo > 0} onClick={() => mudarStatus(osAbertas.map((o) => o.id), 'entregue_cliente')}>Entregar ao cliente</Button>
+          </div>
+        </Section>
+      )}
+
       {[...venda.ordens].sort((a, b) => a.letra.localeCompare(b.letra) || a.oculos - b.oculos).map((o) => (
         <Section key={o.id} title={`OS ${o.numero}-${o.letra} · Óculos ${o.oculos}`} aside={
           <div className="flex items-center gap-2">
-            <span className="rounded bg-brand-soft px-2 py-1 text-xs font-semibold text-brand">{STATUS_OS[o.status]}</span>
+            {venda.status === 'confirmada' && o.status !== 'cancelada' ? (
+              <Select aria-label={`Andamento da OS ${o.numero}-${o.letra}`} className="h-8 w-44 text-sm" value={o.status}
+                onChange={(e) => {
+                  const st = e.target.value
+                  if (st === 'entregue_cliente' && saldo > 0) { toast(`Receba o saldo de ${brl(saldo)} antes de entregar.`, 'erro'); return }
+                  mudarStatus([o.id], st)
+                }}>
+                {Object.entries(STATUS_OS).filter(([k]) => !['rascunho', 'cancelada'].includes(k)).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+              </Select>
+            ) : (
+              <span className="rounded bg-brand-soft px-2 py-1 text-xs font-semibold text-brand">{STATUS_OS[o.status]}</span>
+            )}
             <Button variant="ghost" size="sm" icon={Printer} onClick={() => nav(`/vendas/${venda.id}/imprimir?os=${o.id}`)}>Imprimir</Button>
           </div>}>
           <div className="flex flex-col gap-3">
-            <p className="text-sm text-muted">Paciente <span className="font-medium text-ink">{o.paciente?.nome}</span> · retirada em {dataBR(o.previsao_entrega)}</p>
+            <p className="text-sm text-muted">Paciente <span className="font-medium text-ink">{o.paciente?.nome}</span> · retirada em {dataBR(o.previsao_entrega)}{o.data_entrega && <span className="font-semibold text-ok"> · entregue em {dataHoraBR(o.data_entrega)}</span>}</p>
             <Receita receitas={o.receitas} />
           </div>
         </Section>
