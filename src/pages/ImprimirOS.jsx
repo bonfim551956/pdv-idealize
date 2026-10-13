@@ -12,7 +12,7 @@ import { QRCodeSVG } from 'qrcode.react'
   Tamanhos em mm e fontes pequenas de propósito: é um documento impresso, não uma tela.
 */
 
-const TIPO_ARO = { nenhum: '', fechada: 'aro fechado', fio_nylon: 'fio de nylon', parafusada: 'parafusado', propria_cliente: 'armação do cliente' }
+const TIPO_ARO = { nenhum: '', fechada: 'aro fechado', propria_cliente: '', acetato: 'acetato', metal_fechado: 'metal fechado', metal_redondo: 'metal redondo', fio_nylon: 'fio de nylon', balgriff: 'balgriff', parafusada: 'parafusado (3 peças)', outro: 'outro' }
 const AVISO = { WHATSAPP: 'WhatsApp', SMS: 'SMS', EMAIL: 'E-mail', TELEFONE: 'Telefone', NENHUM: 'Não avisar' }
 const MAX_ITENS = 5
 
@@ -31,11 +31,21 @@ const TIPOS = {
   CONSERTO: { nome: 'Conserto', cls: 'border-[#16272B] bg-[#16272B] text-[#FAFAFA]' },
   TROCA: { nome: 'Troca', cls: 'border-[#4E6468] bg-[#E6ECED] text-[#16272B]' },
 }
-function SeloTipo({ tipo, grande }) {
+function SaldoLinha({ saldo }) {
+  const deve = saldo > 0.004
+  return (
+    <p className={cx('mt-[0.5mm] flex justify-between rounded-[1mm] px-[1.5mm] py-[0.8mm] font-bold', deve ? 'bg-[#B42318] text-[11px] text-[#FAFAFA]' : 'border-t border-[#16272B]')}
+      style={{ printColorAdjust: 'exact', WebkitPrintColorAdjust: 'exact' }}>
+      <span>{deve ? 'SALDO NA RETIRADA' : 'Situação'}</span><span className="num">{deve ? brl(saldo) : 'Quitado'}</span>
+    </p>
+  )
+}
+const ROTULO_GARANTIA = { oculos: 'óculos', lente: 'lente', armacao: 'armação' }
+function SeloTipo({ tipo, grande, garantiaDe }) {
   const t = TIPOS[tipo] || TIPOS.VENDA
   return (
     <span className={cx('inline-flex items-center rounded-[1mm] border-[1.5px] font-display font-extrabold uppercase tracking-wide', grande ? 'px-[2.5mm] py-[1mm] text-[13px]' : 'px-[1.5mm] py-[0.5mm] text-[10px]', t.cls)}
-      style={{ printColorAdjust: 'exact', WebkitPrintColorAdjust: 'exact' }}>{t.nome}</span>
+      style={{ printColorAdjust: 'exact', WebkitPrintColorAdjust: 'exact' }}>{t.nome}{tipo?.startsWith('GARANTIA') && ROTULO_GARANTIA[garantiaDe] ? ` · ${ROTULO_GARANTIA[garantiaDe]}` : ''}</span>
   )
 }
 
@@ -58,7 +68,7 @@ function Cabecalho({ venda, ordens, via, compacto }) {
         {compacto && <p className="text-[9px] font-bold">{l.nome}</p>}
       </div>
       <div className="flex items-center gap-3 text-right">
-        <SeloTipo tipo={venda.tipo} grande />
+        <SeloTipo tipo={venda.tipo} garantiaDe={venda.campos_extras?.garantia_de} grande />
         <div className="text-[9px] leading-tight text-[#4E6468]">
           <p>Venda <b className="num text-[#16272B]">{venda.numero}</b> · {unica ? `OS ${ordens[0].letra} · Óculos ${ordens[0].oculos}` : `${new Set(ordens.map((o) => o.letra)).size} cliente(s) · ${ordens.length} óculos`}</p>
           <p className="num">{dataHoraBR(venda.data_venda)}</p>
@@ -231,7 +241,7 @@ function ViaLoja({ venda, os }) {
               <span className="num">{brl(r.valor)}</span>
             </p>
           ))}
-          <p className="flex justify-between border-t border-[#16272B] font-bold"><span>{saldo > 0 ? 'Saldo na retirada' : 'Situação'}</span><span className="num">{saldo > 0 ? brl(saldo) : 'Quitado'}</span></p>
+          <SaldoLinha saldo={saldo} />
         </div>
       </div>
       <div className="mt-auto grid grid-cols-[1fr_1fr] gap-[8mm] text-[8px] text-[#4E6468]">
@@ -299,7 +309,7 @@ function ViaClienteBase({ venda, clienteId, numeroOS, detalhe, retirada, altura 
       </div>
       <div className="grid flex-1 grid-cols-3 content-center gap-x-[4mm] gap-y-[2mm] py-[2.5mm]">
         <div className="col-span-2">
-          <p className="flex items-center gap-[2mm] text-[8px] font-bold uppercase tracking-wider text-[#0B6E71]">Via do cliente <SeloTipo tipo={venda.tipo} /></p>
+          <p className="flex items-center gap-[2mm] text-[8px] font-bold uppercase tracking-wider text-[#0B6E71]">Via do cliente <SeloTipo tipo={venda.tipo} garantiaDe={venda.campos_extras?.garantia_de} /></p>
           <p className="num font-display text-[15px] font-extrabold leading-tight">OS {numeroOS} {detalhe && <span className="text-[10px] font-bold">{detalhe}</span>}</p>
         </div>
         <div>
@@ -314,8 +324,8 @@ function ViaClienteBase({ venda, clienteId, numeroOS, detalhe, retirada, altura 
           <Rotulo>Data de retirada</Rotulo>
           <p className="num text-[12px] font-bold">{dataBR(retirada)}</p>
         </div>
-        <div className="rounded-[1mm] bg-[#FEF1E2] px-[1.5mm] py-[0.5mm]" style={corExata}>
-          <Rotulo>Saldo na retirada</Rotulo>
+        <div className={cx('rounded-[1mm] px-[1.5mm] py-[0.5mm]', saldo > 0.004 ? 'bg-[#B42318] text-[#FAFAFA]' : 'bg-[#E4F2EA] text-[#1E7A46]')} style={corExata}>
+          <p className="text-[8px] font-bold uppercase tracking-wide">Saldo na retirada</p>
           <p className="num font-display text-[13px] font-extrabold leading-tight">{saldo > 0.004 ? brl(saldo) : 'Quitado'}</p>
         </div>
       </div>
@@ -359,7 +369,7 @@ function Pagamento({ venda, itens, parte }) {
             <span className="num">{brl(r.valor)}</span>
           </p>
         ))}
-        <p className="flex justify-between border-t border-[#16272B] font-bold"><span>{saldo > 0.004 ? 'Saldo na retirada' : 'Situação'}</span><span className="num">{saldo > 0.004 ? brl(saldo) : 'Quitado'}</span></p>
+        <SaldoLinha saldo={saldo} />
       </div>
     </div>
   )

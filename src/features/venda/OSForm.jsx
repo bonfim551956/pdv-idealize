@@ -5,6 +5,16 @@ import { olhoVazio } from '../../lib/receita'
 import { Field, Input, Select, Switch, Chips, Section, Button, Textarea, cx } from '../../components/ui'
 import ReceitaGrid from './ReceitaGrid'
 
+export const TIPOS_ARO = [
+  ['acetato', 'Acetato'],
+  ['metal_fechado', 'Metal fechado'],
+  ['metal_redondo', 'Metal redondo'],
+  ['fio_nylon', 'Fio de nylon'],
+  ['balgriff', 'Balgriff'],
+  ['parafusada', 'Parafusado (3 peças)'],
+  ['outro', 'Outro'],
+]
+
 export const PRAZO_PADRAO_DIAS = 10
 const dataLocalISO = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 
@@ -20,7 +30,7 @@ export const novaOS = (letra, oculos = 1) => ({
   iniciais: '',
   observacoes: '',
   receita: { OD: olhoVazio(), OE: olhoVazio() },
-  armacao: { propria: false, produto: null, mha: '', mva: '', ponte: '', dma: '', tipo: 'fechada', modelo_desenho: '', enviar_montagem: true, clipon: false },
+  armacao: { propria: false, produto: null, mha: '', mva: '', ponte: '', dma: '', tipo: '', modelo_desenho: '', enviar_montagem: true, clipon: false },
   lentes: { mesma: true, OD: { produto: null, dnp: '', altura: '' }, OE: { produto: null, dnp: '', altura: '' } },
 })
 
@@ -217,7 +227,7 @@ export default function OSForm({ os, base, onChange, lentes, armacoes, laborator
         {erros.receita && <p className="mt-2 text-sm text-danger" role="alert">{erros.receita}</p>}
       </Section>
 
-      <Section title="Armação" aside={<Switch checked={os.armacao.propria} onCheckedChange={(v) => setArm({ propria: v, produto: v ? null : os.armacao.produto, tipo: v ? 'propria_cliente' : 'fechada' })} label="Armação do cliente" />}>
+      <Section title="Armação" aside={<Switch checked={os.armacao.propria} onCheckedChange={(v) => setArm({ propria: v, produto: v ? null : os.armacao.produto })} label="Armação do cliente" />}>
         <div className="flex flex-col gap-4">
           {!os.armacao.propria && <ArmacaoBusca armacoes={armacoes} value={os.armacao.produto} onChange={(p) => setArm({ produto: p })} />}
           {erros.armacao && <p className="text-sm text-danger" role="alert">{erros.armacao}</p>}
@@ -232,8 +242,8 @@ export default function OSForm({ os, base, onChange, lentes, armacoes, laborator
             <Field label="Tipo de aro">
               {({ id }) => (
                 <Select id={id} value={os.armacao.tipo} onChange={(e) => setArm({ tipo: e.target.value })}>
-                  <option value="fechada">Fechado</option><option value="fio_nylon">Fio de nylon</option>
-                  <option value="parafusada">Parafusado</option><option value="propria_cliente">Armação do cliente</option>
+                  <option value="">Selecione</option>
+                  {TIPOS_ARO.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
                 </Select>
               )}
             </Field>

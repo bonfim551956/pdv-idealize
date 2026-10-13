@@ -231,8 +231,10 @@ export default function Vendas() {
                         {isAdmin && <p className="text-xs text-muted">{v.loja.replace('Óticas Idealize ', '')}</p>}
                       </td>
                       <td className="num px-4 py-3 text-right">{brl(v.total)}</td>
-                      <td className={cx('num px-4 py-3 text-right font-semibold', v.status === 'confirmada' && saldo > 0.004 ? 'text-danger' : 'text-muted')}>
-                        {v.status === 'cancelada' ? '—' : saldo > 0.004 ? brl(saldo) : 'Quitada'}
+                      <td className="num px-4 py-3 text-right font-semibold text-muted">
+                        {v.status === 'cancelada' ? '—' : saldo > 0.004
+                          ? <span className="inline-block rounded bg-danger px-2 py-0.5 text-surface">{brl(saldo)}</span>
+                          : 'Quitada'}
                       </td>
                       <td className="pr-3 text-muted"><ChevronRight className="h-4 w-4" aria-hidden /></td>
                     </tr>
@@ -258,7 +260,7 @@ export default function Vendas() {
                       <span className="text-muted">{dataBR(v.data_venda)} · {v.vendedor}{v.os_numeros.length ? ` · OS ${v.os_numeros.join(', ')}` : ''}</span>
                       <span className="num text-right font-semibold">
                         {brl(v.total)}
-                        {v.status === 'confirmada' && saldo > 0.004 && <span className="block text-xs text-danger">falta {brl(saldo)}</span>}
+                        {v.status === 'confirmada' && saldo > 0.004 && <span className="mt-1 inline-block rounded bg-danger px-2 py-0.5 text-xs text-surface">saldo {brl(saldo)}</span>}
                       </span>
                     </div>
                   </Link>

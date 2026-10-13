@@ -6,7 +6,7 @@ import { supabase, mensagemErro } from '../lib/supabase'
 import { useAuth } from '../lib/auth'
 import { brl, parseNum } from '../lib/format'
 import { validarOlho, olhoTemDados, olhoParaPayload } from '../lib/receita'
-import { Button, Field, Input, Select, Switch, Section, Spinner, Alert, Textarea, cx, useToast } from '../components/ui'
+import { Button, Field, Input, Select, Switch, Section, Spinner, Alert, Textarea, Chips, cx, useToast } from '../components/ui'
 import ClienteFicha, { fichaVazia } from '../features/venda/ClienteFicha'
 import OSForm, { novaOS } from '../features/venda/OSForm'
 import ClientePicker from '../features/venda/ClientePicker'
@@ -20,6 +20,13 @@ const TIPOS_VENDA = [
   { value: 'CONSERTO', label: 'Conserto', descricao: 'Serviço, com ou sem cobrança' },
 ]
 const SEM_ITEM_OK = ['CONSERTO', 'GARANTIA', 'CORTESIA'] // podem ser confirmadas só com a OS
+const GARANTIA_DE = [
+  { value: 'oculos', label: 'Óculos completo' },
+  { value: 'lente', label: 'Lente' },
+  { value: 'armacao', label: 'Armação' },
+]
+// OS sem exigência de receita e lente: conserto e garantia só da armação
+const osSimples = (tipo, garantiaDe) => tipo === 'CONSERTO' || (tipo.startsWith('GARANTIA') && garantiaDe === 'armacao')
 const SEM_COBRANCA = ['GARANTIA', 'CORTESIA']
 const LETRAS = 'ABCDEFGH'
 const MAX_OCULOS = 6
@@ -60,8 +67,8 @@ function itensDaOS(os) {
 function validarOS(os, tipo) {
   const e = {}
   if (!os.previsao_entrega) e.previsao_entrega = 'Informe a data de retirada'
-  if (tipo === 'CONSERTO') {
-    // conserto: receita, lente e armação são opcionais; se tiver lente, DNP e altura continuam obrigatórias
+  if (tipo === 'SIMPLES') {
+    // conserto e garantia de armação: receita, lente e armação são opcionais; se tiver lente, DNP e altura continuam obrigatórias
     for (const o of ['OD', 'OE']) {
       if (!os.lentes[o].produto) continue
       if (parseNum(os.lentes[o].dnp) === null) e[`dnp${o}`] = 'Obrigatória'
@@ -111,6 +118,7 @@ export default function NovaVenda() {
   const [ficha, setFicha] = useState(fichaVazia)
   const [avancando, setAvancando] = useState(false)
   const [tipo, setTipo] = useState('VENDA')
+  const [garantiaDe, setGarantiaDe] = useState('oculos')
   const [observacoes, setObservacoes] = useState('')
   const [gerarOS, setGerarOS] = useState(true)
   const [osList, setOsList] = useState([novaOS('A', 1)])
@@ -237,7 +245,7 @@ export default function NovaVenda() {
     } else if (passo === 1) {
       const ec = Object.fromEntries(letras.filter((l) => l !== 'A' && !vinculados[l]).map((l) => [l, 'Escolha ou cadastre o cliente desta OS']))
       setErrosCliente(ec)
-      const todos = Object.fromEntries(osList.map((o) => [chave(o), validarOS(efetiva(o, osList), tipo)]))
+      const todos = Object.fromEntries(osList.map((o) => [chave(o), validarOS(efetiva(o, osList), osSimples(tipo, garantiaDe) ? 'SIMPLES' : tipo)]))
       setErrosOS(todos)
       const semCliente = letras.find((l) => ec[l])
       const comErro = osList.find((o) => Object.keys(todos[chave(o)]).length)
@@ -259,7 +267,7 @@ export default function NovaVenda() {
       cliente_id: cliente.id,
       tipo,
       observacoes,
-      campos_extras: { meio_contato: cliente.origem },
+      campos_extras: { meio_contato: cliente.origem, ...(tipo.startsWith('GARANTIA') ? { garantia_de: garantiaDe } : {}) },
       confirmar: true,
       os: gerarOS ? osList.map((o) => efetiva(o, osList)).map((os) => ({
         letra: os.letra,
@@ -278,7 +286,7 @@ export default function NovaVenda() {
         armacao: {
           produto_id: os.armacao.propria ? null : os.armacao.produto?.id,
           mha: nOuNull(os.armacao.mha), mva: nOuNull(os.armacao.mva), ponte: nOuNull(os.armacao.ponte), dma: nOuNull(os.armacao.dma),
-          tipo: os.armacao.propria ? 'propria_cliente' : os.armacao.tipo,
+          tipo: os.armacao.tipo || 'nenhum',
           modelo_desenho: os.armacao.modelo_desenho, enviar_montagem: os.armacao.enviar_montagem, clipon: os.armacao.clipon,
         },
         itens: itensDaOS(os).map((i) => ({ produto_id: i.produto.id, olho: i.olho, quantidade: i.quantidade, desconto: descDe(i.key) })),
@@ -338,6 +346,13 @@ export default function NovaVenda() {
                       ))}
                     </div>
                   </div>
+                  {tipo.startsWith('GARANTIA') && (
+                    <div className="flex flex-col gap-2">
+                      <span className="text-sm font-medium text-muted">O que está na garantia? <span className="text-danger">*</span></span>
+                      <Chips label="Garantia de" value={garantiaDe} onChange={(v) => v && setGarantiaDe(v)} options={GARANTIA_DE} />
+                      {garantiaDe === 'armacao' && <p className="text-xs text-muted">Garantia de armação: receita e lente não são obrigatórias.</p>}
+                    </div>
+                  )}
                   <div className="grid gap-4 sm:grid-cols-2">
                     <div className="flex flex-col gap-1">
                       <span className="text-sm font-medium text-muted">Loja e consultor</span>

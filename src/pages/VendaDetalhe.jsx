@@ -123,12 +123,15 @@ export default function VendaDetalhe() {
           ['Total', resumo.total, 'text-ink'],
           ['Recebido', resumo.recebido, 'text-ok'],
           ['A receber', saldo, saldo > 0 ? 'text-danger' : 'text-muted'],
-        ].map(([l, val, cor], i) => (
-          <div key={l} className={cx('flex flex-col gap-1 p-4 sm:p-6', i > 0 && 'border-l border-line')}>
-            <span className="text-sm text-muted">{l}</span>
-            <span className={cx('num text-lg font-bold sm:text-2xl', cor)}>{brl(val)}</span>
-          </div>
-        ))}
+        ].map(([l, val, cor], i) => {
+          const alerta = l === 'A receber' && val > 0.004
+          return (
+            <div key={l} className={cx('flex flex-col gap-1 p-4 sm:p-6', i > 0 && 'border-l border-line', alerta && 'bg-danger text-surface')}>
+              <span className={cx('text-sm', alerta ? 'font-semibold text-surface' : 'text-muted')}>{alerta ? 'Saldo a receber' : l}</span>
+              <span className={cx('num text-lg font-bold sm:text-2xl', alerta ? 'text-surface' : cor)}>{brl(val)}</span>
+            </div>
+          )
+        })}
       </div>
 
       {podeReceber && (
