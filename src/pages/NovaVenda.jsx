@@ -41,6 +41,7 @@ export function efetiva(os, lista) {
   return {
     ...os,
     receita: base.receita,
+    receita_exame_id: base.receita_exame_id,
     lentes: {
       ...os.lentes,
       OD: { ...os.lentes.OD, dnp: base.lentes.OD.dnp },
@@ -279,6 +280,7 @@ export default function NovaVenda() {
         aviso_entrega: os.aviso_entrega,
         iniciais: os.iniciais,
         observacoes: os.observacoes,
+        receita_exame_id: os.receita_exame_id || null,
         receita: Object.fromEntries(['OD', 'OE'].filter((o) => olhoTemDados(os.receita[o])).map((o) => [o, olhoParaPayload(os.receita[o])])),
         lentes: Object.fromEntries(['OD', 'OE'].filter((o) => os.lentes[o].produto).map((o) => [o, {
           produto_id: os.lentes[o].produto.id, dnp: nOuNull(os.lentes[o].dnp), altura: nOuNull(os.lentes[o].altura),
@@ -439,7 +441,8 @@ export default function NovaVenda() {
                   )}
                   <OSForm os={o} base={o.oculos > 1 ? osList.find((x) => x.letra === o.letra && x.oculos === 1) : null}
                     onChange={(n) => atualizarOS(chave(o), n)}
-                    lentes={dados.lentes} armacoes={dados.armacoes} laboratorios={dados.laboratorios} erros={errosOS[chave(o)]} />
+                    lentes={dados.lentes} armacoes={dados.armacoes} laboratorios={dados.laboratorios} erros={errosOS[chave(o)]}
+                    paciente={o.letra === 'A' ? cliente : vinculados[o.letra]} />
                 </div>
               ))}
             </div>

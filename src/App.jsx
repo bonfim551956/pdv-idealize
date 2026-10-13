@@ -8,6 +8,7 @@ import VendaDetalhe from './pages/VendaDetalhe'
 import Produtos from './pages/Produtos'
 import ImprimirOS from './pages/ImprimirOS'
 import Relatorios from './pages/Relatorios'
+import Fechamento from './pages/Fechamento'
 import Usuarios from './pages/Usuarios'
 import { Spinner, Alert, Button } from './components/ui'
 
@@ -39,6 +40,7 @@ export default function App() {
               <Route path="/nova-venda" element={<NovaVenda />} />
               <Route path="/vendas/:id" element={<VendaDetalhe />} />
               <Route path="/relatorios" element={<Relatorios />} />
+              <Route path="/fechamento" element={<Fechamento />} />
               <Route path="/produtos" element={perm.produtos ? <Produtos /> : <Navigate to="/" />} />
               <Route path="/usuarios" element={perm.usuarios ? <Usuarios /> : <Navigate to="/" />} />
               <Route path="*" element={<Navigate to="/" />} />

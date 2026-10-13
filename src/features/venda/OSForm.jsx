@@ -1,9 +1,10 @@
 import { useMemo, useState, useEffect } from 'react'
-import { Search, X } from 'lucide-react'
+import { Search, X, Stethoscope } from 'lucide-react'
 import { brl, somaDias, hojeISO } from '../../lib/format'
 import { olhoVazio } from '../../lib/receita'
 import { Field, Input, Select, Switch, Chips, Section, Button, Textarea, cx } from '../../components/ui'
 import ReceitaGrid from './ReceitaGrid'
+import ReceitaExameModal, { receitaDoExame } from './ReceitaExameModal'
 
 export const TIPOS_ARO = [
   ['acetato', 'Acetato'],
@@ -163,8 +164,24 @@ function ArmacaoBusca({ armacoes, value, onChange }) {
 const num = (v) => v.replace(/[^\d,.]/g, '')
 
 /* ---------- OS completa ---------- */
-export default function OSForm({ os, base, onChange, lentes, armacoes, laboratorios, erros = {} }) {
+export default function OSForm({ os, base, onChange, lentes, armacoes, laboratorios, erros = {}, paciente }) {
   const set = (patch) => onChange({ ...os, ...patch })
+  const [buscarExame, setBuscarExame] = useState(false)
+  const usarExame = (r) => {
+    const x = receitaDoExame(r)
+    set({
+      receita: x.receita,
+      receita_exame_id: r.id,
+      receita_exame_info: `${r.paciente_nome} · exame ${x.data ? x.data.split('-').reverse().join('/') : ''}`,
+      ...(x.data ? { data_receita: x.data } : {}),
+      lentes: {
+        ...os.lentes,
+        OD: { ...os.lentes.OD, ...(x.dnp.OD ? { dnp: x.dnp.OD } : {}) },
+        OE: { ...os.lentes.OE, ...(x.dnp.OE ? { dnp: x.dnp.OE } : {}) },
+      },
+    })
+  }
+  const buscaInicial = paciente?.celular?.replace(/\D/g, '').length >= 10 ? paciente.celular : (paciente?.nome || '')
   const setArm = (patch) => set({ armacao: { ...os.armacao, ...patch } })
   const setLen = (patch) => set({ lentes: { ...os.lentes, ...patch } })
   const setOlhoLente = (olho, patch) => setLen({ [olho]: { ...os.lentes[olho], ...patch } })
@@ -208,14 +225,28 @@ export default function OSForm({ os, base, onChange, lentes, armacoes, laborator
         </div>
       </Section>
 
-      <Section title="Receita e medidas" aside={base && (
+      <Section title="Receita e medidas" aside={(
+        <div className="flex flex-wrap items-center gap-3">
+          {!(base && os.usarBase) && (
+            <Button variant="secondary" size="sm" icon={Stethoscope} onClick={() => setBuscarExame(true)}>Buscar receita do exame</Button>
+          )}
+          {base && (
         <Switch checked={os.usarBase} onCheckedChange={(v) => set(v ? { usarBase: true } : {
           usarBase: false,
           // ao desligar, este óculos começa com uma cópia da receita do óculos 1 para ajustar
           receita: JSON.parse(JSON.stringify(base.receita)),
           lentes: { ...os.lentes, OD: { ...os.lentes.OD, dnp: base.lentes.OD.dnp }, OE: { ...os.lentes.OE, dnp: base.lentes.OE.dnp } },
         })} label="Mesma receita e DNP do Óculos 1" />
+          )}
+        </div>
       )}>
+        {os.receita_exame_id && !(base && os.usarBase) && (
+          <p className="mb-3 inline-flex items-center gap-2 rounded-md bg-brand-soft px-3 py-1.5 text-sm text-brand">
+            <Stethoscope className="h-4 w-4" />Receita do nosso exame: <span className="font-semibold capitalize">{os.receita_exame_info}</span>
+            <button type="button" className="ml-1 text-muted underline hover:text-ink" onClick={() => set({ receita_exame_id: null, receita_exame_info: null })}>desvincular</button>
+          </p>
+        )}
+        <ReceitaExameModal open={buscarExame} onOpenChange={setBuscarExame} buscaInicial={buscaInicial} onUsar={usarExame} />
         {base && os.usarBase ? (
           <ReceitaGrid travado travadoTexto="Graus e DNP vêm do Óculos 1. Informe só a altura, que depende da armação deste óculos." receita={base.receita} onChange={() => {}} exigeAdicao={multifocal}
             medidas={{ OD: { dnp: base.lentes.OD.dnp, altura: os.lentes.OD.altura }, OE: { dnp: base.lentes.OE.dnp, altura: os.lentes.OE.altura } }}

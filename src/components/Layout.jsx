@@ -1,5 +1,5 @@
 import { NavLink } from 'react-router-dom'
-import { ReceiptText, PlusCircle, Glasses, LogOut, Store, BarChart3, Users } from 'lucide-react'
+import { ReceiptText, PlusCircle, Glasses, LogOut, Store, BarChart3, Users, Wallet } from 'lucide-react'
 import { PERFIS } from '../lib/permissoes'
 import { useAuth } from '../lib/auth'
 import { cx } from './ui'
@@ -13,6 +13,7 @@ export default function Layout({ children }) {
   const links = [
     { to: '/', label: 'Vendas', icon: ReceiptText, end: true },
     { to: '/nova-venda', label: 'Nova OS', icon: PlusCircle },
+    { to: '/fechamento', label: 'Fechamento de caixa', icon: Wallet },
     { to: '/relatorios', label: 'Relatórios', icon: BarChart3 },
     ...(perm.produtos ? [{ to: '/produtos', label: 'Lentes e preços', icon: Glasses }] : []),
     ...(perm.usuarios ? [{ to: '/usuarios', label: 'Usuários', icon: Users }] : []),

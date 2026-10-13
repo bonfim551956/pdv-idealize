@@ -160,7 +160,7 @@ const ClienteFicha = forwardRef(function ClienteFicha({ empresaId, onClienteSalv
       }
       setF((x) => ({ ...x, id: cliente.id }))
       onClienteSalvo?.(cliente)
-      return cliente
+      return { ...cliente, celular: f.celular }
     },
   }))
 
