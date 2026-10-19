@@ -31,7 +31,7 @@ export default function NotaFiscalVenda({ venda, porCliente }) {
     try {
       const r = await nfce(body)
       const n = r?.nota
-      if (n?.status === 'erro_autorizacao') setErro(`Nota rejeitada pela SEFAZ: ${n.mensagem || 'veja o detalhe na lista.'}`)
+      if (n?.status === 'erro_autorizacao') setErro(`Nota não autorizada: ${n.mensagem || 'veja o detalhe na lista.'}`)
       else if (ok) toast(ok)
       await carregar()
       return r
