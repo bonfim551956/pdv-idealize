@@ -387,6 +387,8 @@ export default function NovaVenda() {
         })}
       </ol>
 
+      {erroSalvar && passo !== 2 && <Alert>{erroSalvar}</Alert>}
+
       <AnimatePresence mode="wait">
         <motion.div key={passo} initial={{ opacity: 0, x: 16 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -16 }} transition={{ duration: 0.18 }}>
           {passo === 0 && (

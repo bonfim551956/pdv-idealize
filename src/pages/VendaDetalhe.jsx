@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link, useParams, useNavigate } from 'react-router-dom'
-import { ArrowLeft, Banknote, QrCode, Wallet, CreditCard, FileText, Receipt, Landmark, Coins, Undo2, Printer, PackageCheck } from 'lucide-react'
+import { ArrowLeft, Banknote, QrCode, Wallet, CreditCard, FileText, Receipt, Landmark, Coins, Undo2, Printer, PackageCheck, XCircle } from 'lucide-react'
 import { supabase, mensagemErro } from '../lib/supabase'
 import { brl, dataBR, dataHoraBR, grau, STATUS_OS } from '../lib/format'
 import { Button, Section, Spinner, Alert, Modal, Select, cx, useToast } from '../components/ui'
@@ -47,12 +47,15 @@ export default function VendaDetalhe() {
   const [erro, setErro] = useState(null)
   const [forma, setForma] = useState(null)
   const [estornar, setEstornar] = useState(null)
+  const [cancelar, setCancelar] = useState(false)
+  const [motivo, setMotivo] = useState('')
+  const [cancelando, setCancelando] = useState(false)
   const [processando, setProcessando] = useState(false)
 
   const carregar = useCallback(async () => {
     const [v, r, rc] = await Promise.all([
       supabase.from('vendas').select(`
-        id, numero, os_numero, status, tipo, data_venda, observacoes, campos_extras, loja_id, total_bruto, total_desconto, total_liquido,
+        id, numero, os_numero, status, motivo_cancelamento, cancelada_em, tipo, data_venda, observacoes, campos_extras, loja_id, total_bruto, total_desconto, total_liquido,
         cliente:clientes(id, nome, documento), vendedor:colaboradores!vendas_vendedor_id_fkey(nome), loja:lojas(nome),
         itens:itens_venda(id, sku, descricao, olho, quantidade, preco_unitario, desconto, total, os_id),
         ordens:ordens_servico(id, numero, letra, oculos, status, previsao_entrega, data_entrega, paciente_id, paciente:clientes(id, nome, documento),
@@ -78,6 +81,14 @@ export default function VendaDetalhe() {
     toast('Recebimento estornado')
     setEstornar(null)
     carregar()
+  }
+
+  const confirmarCancelamento = async () => {
+    setCancelando(true)
+    const { error } = await supabase.rpc('cancelar_venda', { p_venda: venda.id, p_motivo: motivo })
+    setCancelando(false)
+    if (error) { toast(mensagemErro(error), 'erro'); return }
+    toast('Venda cancelada'); setCancelar(false); setMotivo(''); carregar()
   }
 
   // Atualiza o andamento das OS (ex.: Pronta, Na loja, Entregue). Entregue grava a data da entrega.
@@ -122,10 +133,19 @@ export default function VendaDetalhe() {
             {venda.cliente.nome} · {venda.loja.nome} · {venda.vendedor.nome} · {dataHoraBR(venda.data_venda)}
           </p>
         </div>
-        {venda.ordens.length > 0 && venda.status !== 'cancelada' && (
-          <Button variant="secondary" icon={Printer} onClick={() => nav(`/vendas/${venda.id}/imprimir`)}>{venda.ordens.length > 1 ? 'Imprimir todas as OS' : 'Imprimir OS'}</Button>
-        )}
+        <div className="flex flex-wrap gap-2">
+          {venda.ordens.length > 0 && venda.status !== 'cancelada' && (
+            <Button variant="secondary" icon={Printer} onClick={() => nav(`/vendas/${venda.id}/imprimir`)}>{venda.ordens.length > 1 ? 'Imprimir todas as OS' : 'Imprimir OS'}</Button>
+          )}
+          {venda.status === 'confirmada' && (
+            <Button variant="danger" icon={XCircle} onClick={() => setCancelar(true)}>Cancelar venda</Button>
+          )}
+        </div>
       </div>
+
+      {venda.status === 'cancelada' && (
+        <Alert>Venda cancelada{venda.cancelada_em ? ` em ${dataHoraBR(venda.cancelada_em)}` : ''}{venda.motivo_cancelamento ? ` · motivo: ${venda.motivo_cancelamento}` : ''}</Alert>
+      )}
 
       {/* Resumo financeiro: o número que importa no balcão */}
       <div className="grid grid-cols-3 overflow-hidden rounded-lg border border-line bg-surface">
@@ -293,6 +313,24 @@ export default function VendaDetalhe() {
           </div>
         </Section>
       ))}
+
+      <Modal open={cancelar} onOpenChange={(v) => { if (!v) { setCancelar(false); setMotivo('') } }} title="Cancelar venda?">
+        <div className="flex flex-col gap-4">
+          {receb.some((r) => r.status === 'ativo') ? (
+            <Alert>Esta venda tem recebimentos. Estorne cada recebimento antes de cancelar, para o caixa fechar certo.</Alert>
+          ) : (
+            <p className="text-sm">A venda e todas as OS dela ficam canceladas e saem do faturamento, do ranking e da comissão. Não dá para desfazer.</p>
+          )}
+          <label className="flex flex-col gap-1 text-sm font-medium text-muted">Motivo do cancelamento *
+            <textarea className="min-h-20 rounded-md border border-line bg-surface p-3 text-sm text-ink focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20"
+              value={motivo} onChange={(e) => setMotivo(e.target.value)} placeholder="Ex.: cliente desistiu, venda lançada em duplicidade" />
+          </label>
+          <div className="flex justify-end gap-2">
+            <Button variant="ghost" onClick={() => { setCancelar(false); setMotivo('') }}>Voltar</Button>
+            <Button variant="danger" loading={cancelando} disabled={!motivo.trim() || receb.some((r) => r.status === 'ativo')} onClick={confirmarCancelamento}>Cancelar venda</Button>
+          </div>
+        </div>
+      </Modal>
 
       <Modal open={!!estornar} onOpenChange={(v) => !v && setEstornar(null)} title="Estornar recebimento?">
         {estornar && (
