@@ -5,6 +5,8 @@ import { Field, Input, Select, Button, Alert, cx } from '../../components/ui'
 import { cpfValido, ORIGENS } from './ClientePicker'
 
 const soDigitos = (s) => (s || '').replace(/\D/g, '')
+// data aaaa-mm-dd completa e plausível (o campo de data dispara mudanças enquanto o ano é digitado)
+const dataCompleta = (v) => /^\d{4}-\d{2}-\d{2}$/.test(v || '') && +v.slice(0, 4) >= 1900 && new Date(v + 'T12:00:00') <= new Date()
 const mascaraCPF = (v) => soDigitos(v).slice(0, 11).replace(/(\d{3})(\d)/, '$1.$2').replace(/(\d{3})(\d)/, '$1.$2').replace(/(\d{3})(\d{1,2})$/, '$1-$2')
 const mascaraFone = (v) => {
   const d = soDigitos(v).slice(0, 11)
@@ -80,18 +82,31 @@ const ClienteFicha = forwardRef(function ClienteFicha({ empresaId, onClienteSalv
     if (data) {
       setBuscandoCpf(false)
       await escolher(data)
-      setAvisoCpf(`Cliente encontrado pelo CPF: ${data.nome}. Os dados foram preenchidos; confira com o cliente.`)
+      setAvisoCpf({ tom: 'ok', txt: `Cliente encontrado pelo CPF: ${data.nome}. Os dados foram preenchidos; confira com o cliente.` })
       return
     }
     setAvisoCpf(null)
-    // Cliente novo: busca nome completo e nascimento na Receita (Serpro), sem sobrescrever o que já foi digitado
+    if (dataCompleta(f.nascimento)) consultarReceita(doc, f.nascimento)
+  }
+
+  // Cliente novo: com CPF + data de nascimento, a Receita (Serpro Consulta CPF v3) confirma e devolve o nome completo.
+  // A v3 não devolve a data de nascimento: ela é perguntada ao cliente e conferida com a Receita.
+  // Cada consulta é cobrada, então o mesmo par CPF + data não é consultado duas vezes.
+  const ultimaConsulta = useRef('')
+  const consultarReceita = async (cpfDig, nasc) => {
+    const chave = `${cpfDig}|${nasc}`
+    if (f.id || !cpfValido(cpfDig) || ultimaConsulta.current === chave) return
+    ultimaConsulta.current = chave
     setBuscandoCpf(true)
-    const { data: rf } = await supabase.functions.invoke('consultar-cpf', { body: { cpf: doc } }).catch(() => ({ data: null }))
+    const { data: rf } = await supabase.functions.invoke('consultar-cpf', { body: { cpf: cpfDig, nascimento: nasc } }).catch(() => ({ data: null }))
     setBuscandoCpf(false)
-    if (!rf || rf.configurado === false || rf.erro || !rf.nome) return
-    setF((x) => ({ ...x, nome: x.nome.trim() ? x.nome : rf.nome, nascimento: x.nascimento || rf.nascimento || '' }))
+    if (!rf || rf.configurado === false) return
+    if (rf.erro) { setAvisoCpf({ tom: 'warn', txt: rf.erro }); return }
+    if (!rf.nome) return
+    setF((x) => ({ ...x, nome: rf.nome }))
     const sit = rf.situacao && !/regular/i.test(rf.situacao) ? ` Atenção: situação do CPF na Receita é "${rf.situacao}".` : ''
-    setAvisoCpf(`Dados da Receita: ${rf.nome}${rf.nascimento ? `, nascido(a) em ${rf.nascimento.split('-').reverse().join('/')}` : ''}. Confira com o cliente.${sit}`)
+    const social = rf.nome_social ? ` Nome social: ${rf.nome_social}.` : ''
+    setAvisoCpf({ tom: sit ? 'warn' : 'ok', txt: `Confirmado na Receita: ${rf.nome}.${social} Confira com o cliente.${sit}` })
   }
 
   // CEP preenche o endereço sozinho assim que tiver 8 dígitos (ViaCEP, com BrasilAPI de reserva)
@@ -214,12 +229,11 @@ const ClienteFicha = forwardRef(function ClienteFicha({ empresaId, onClienteSalv
       </div>
 
       {erro && <Alert>{erro}</Alert>}
-      {avisoCpf && <Alert tone="ok">{avisoCpf}</Alert>}
+      {avisoCpf && <Alert tone={avisoCpf.tom}>{avisoCpf.txt}</Alert>}
 
       {/* Dados obrigatórios */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {campo('nome', 'Nome completo', { wrap: 'sm:col-span-2' }, true)}
-        <Field label="CPF" required error={erros.documento} hint={buscandoCpf ? 'Procurando cadastro e dados na Receita…' : undefined}>
+        <Field label="CPF" required error={erros.documento} hint={buscandoCpf ? 'Procurando cadastro e conferindo na Receita…' : undefined}>
           {({ id, invalid }) => (
             <div className="relative">
               <Input id={id} invalid={invalid} inputMode="numeric" placeholder="000.000.000-00" className="num pr-9" value={f.documento}
@@ -232,6 +246,17 @@ const ClienteFicha = forwardRef(function ClienteFicha({ empresaId, onClienteSalv
             </div>
           )}
         </Field>
+        <Field label="Data de nascimento" hint={!f.id ? 'Com CPF + nascimento, o nome vem da Receita' : undefined}>
+          {({ id }) => (
+            <Input id={id} type="date" max={new Date().toISOString().slice(0, 10)} value={f.nascimento}
+              onChange={(e) => {
+                const v = e.target.value
+                setF((x) => ({ ...x, nascimento: v }))
+                if (dataCompleta(v) && soDigitos(f.documento).length === 11) consultarReceita(soDigitos(f.documento), v)
+              }} />
+          )}
+        </Field>
+        {campo('nome', 'Nome completo', { wrap: 'sm:col-span-2' }, true)}
         {campo('celular', 'Celular / WhatsApp', { onChange: (e) => setF((x) => ({ ...x, celular: mascaraFone(e.target.value) })), input: { inputMode: 'tel', placeholder: '(15) 99999-9999', className: 'num' } }, true)}
         <Field label="Como chegou até a loja" required error={erros.origem}>
           {({ id, invalid }) => (
@@ -241,7 +266,6 @@ const ClienteFicha = forwardRef(function ClienteFicha({ empresaId, onClienteSalv
             </Select>
           )}
         </Field>
-        {campo('nascimento', 'Data de nascimento', { input: { type: 'date' } })}
       </div>
 
       {/* Endereço (obrigatório; o CEP preenche o resto) */}
