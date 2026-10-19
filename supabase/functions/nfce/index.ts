@@ -1,7 +1,7 @@
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts'
 import { createClient } from 'jsr:@supabase/supabase-js@2'
 
-// NFC-e pela Focus NFe. Emitir, consultar, cancelar e configurar a loja.
+// NFC-e (cupom, modelo 65) e NF-e (modelo 55) pela Focus NFe. Emitir, consultar, cancelar e configurar a loja.
 // Os tokens da Focus ficam em pdv.lojas_fiscal (sem acesso pelo navegador); só esta função lê.
 const cors = {
   'Access-Control-Allow-Origin': '*',
@@ -41,11 +41,11 @@ Deno.serve(async (req) => {
   let b: Record<string, any> = {}
   try { b = await req.json() } catch { return erro('Requisição inválida.') }
 
-  const configDe = async (lojaId: string) => {
+  const configDe = async (lojaId: string, ambienteNota?: string) => {
     const { data: f } = await db.from('lojas_fiscal').select('*').eq('loja_id', lojaId).maybeSingle()
     const { data: l } = await db.from('lojas').select('id, nome, cnpj').eq('id', lojaId).maybeSingle()
     if (!f || !l) throw new Error('Loja sem configuração fiscal.')
-    const amb = f.ambiente as 'homologacao' | 'producao'
+    const amb = (ambienteNota || f.ambiente) as 'homologacao' | 'producao'
     const token = amb === 'producao' ? f.token_producao : f.token_homologacao
     if (!token) throw new Error(`Falta o token da Focus NFe (${amb === 'producao' ? 'produção' : 'homologação'}) da loja ${l.nome}. Configure em Nota fiscal.`)
     if (!so(l.cnpj)) throw new Error(`A loja ${l.nome} está sem CNPJ cadastrado.`)
@@ -86,8 +86,10 @@ Deno.serve(async (req) => {
       if (!podeLoja(v.loja_id)) return erro('Venda de outra loja.', 403)
       if (v.status !== 'confirmada') return erro('Só venda confirmada emite nota.')
       const clienteId: string = b.cliente_id || v.cliente_id
-      const { data: ja } = await db.from('notas_fiscais').select('id').eq('venda_id', v.id).eq('cliente_id', clienteId).in('status', ['autorizado', 'processando_autorizacao', 'processando']).limit(1)
-      if (ja?.length) return erro('Já existe nota emitida para este cliente nesta venda.')
+      const modelo: 'nfce' | 'nfe' = b.modelo === 'nfe' ? 'nfe' : 'nfce'
+      // uma nota ativa por cliente na venda (NFC-e ou NF-e: a mesma venda não pode sair em duas notas)
+      const { data: ja } = await db.from('notas_fiscais').select('id, modelo').eq('venda_id', v.id).eq('cliente_id', clienteId).in('status', ['autorizado', 'processando_autorizacao', 'processando']).limit(1)
+      if (ja?.length) return erro(`Já existe ${ja[0].modelo === 'nfe' ? 'NF-e' : 'NFC-e'} ativa para este cliente nesta venda. Cancele antes de emitir outra.`)
       const cfg = await configDe(v.loja_id)
 
       const { data: cli } = await db.from('clientes').select('id, nome, documento').eq('id', clienteId).maybeSingle()
@@ -131,22 +133,57 @@ Deno.serve(async (req) => {
       }
       if (restante > 0) formas.push({ forma_pagamento: '05', valor_pagamento: restante })
 
-      const ref = `pdv-${v.numero}-${so(cli?.documento).slice(-4) || 'x'}-${Date.now().toString(36)}`
+      const ref = `pdv-${modelo === 'nfe' ? 'e' : ''}${v.numero}-${so(cli?.documento).slice(-4) || 'x'}-${Date.now().toString(36)}`
       const payload: Record<string, unknown> = {
         cnpj_emitente: so(cfg.l.cnpj), data_emissao: new Date().toISOString(),
         natureza_operacao: 'VENDA AO CONSUMIDOR', presenca_comprador: '1', modalidade_frete: '9', local_destino: '1',
         items, formas_pagamento: formas,
         informacoes_adicionais_contribuinte: `Venda ${v.numero} - PDV Óticas Idealize`,
       }
-      const cpf = so(cli?.documento)
-      if (cpf.length === 11) { payload.cpf_destinatario = cpf; if (cli?.nome) payload.nome_destinatario = cli.nome }
+      let destinatario: Record<string, unknown> | null = null
+      if (modelo === 'nfce') {
+        const cpf = so(cli?.documento)
+        if (cpf.length === 11) { payload.cpf_destinatario = cpf; if (cli?.nome) payload.nome_destinatario = cli.nome; destinatario = { documento: cpf, nome: cli?.nome } }
+      } else {
+        // NF-e: destinatário identificado com endereço. Padrão = o próprio cliente (CPF); ou outro (ex.: CNPJ da empresa dele)
+        const o = b.destinatario || {}
+        let d: Record<string, any>
+        if (o.documento) {
+          d = { documento: so(o.documento), nome: String(o.nome || '').trim(), ie: so(o.ie), indicador_ie: Number(o.indicador_ie) || 9,
+            cep: so(o.cep), logradouro: o.logradouro, numero: o.numero, complemento: o.complemento, bairro: o.bairro, cidade: o.cidade, uf: String(o.uf || '').toUpperCase() }
+        } else {
+          const { data: end } = await db.from('cliente_enderecos').select('cep, logradouro, numero, complemento, bairro, cidade, uf').eq('cliente_id', clienteId).limit(1).maybeSingle()
+          d = { documento: so(cli?.documento), nome: cli?.nome, ie: '', indicador_ie: 9, ...(end || {}), cep: so(end?.cep), uf: String(end?.uf || '').toUpperCase() }
+        }
+        if (![11, 14].includes(String(d.documento).length)) return erro('NF-e precisa de CPF ou CNPJ do destinatário.')
+        if (!d.nome) return erro('NF-e precisa do nome/razão social do destinatário.')
+        if (!(d.cep && d.logradouro && d.numero && d.bairro && d.cidade && d.uf)) return erro('NF-e precisa do endereço completo do destinatário (CEP, rua, número, bairro, cidade e UF). Complete a ficha do cliente.')
+        if (d.indicador_ie === 1 && !d.ie) return erro('Contribuinte do ICMS precisa da inscrição estadual.')
+        const interestadual = d.uf !== 'SP'
+        const contribuinte = d.indicador_ie === 1
+        Object.assign(payload, {
+          tipo_documento: 1, finalidade_emissao: 1, consumidor_final: contribuinte ? 0 : 1,
+          natureza_operacao: contribuinte ? 'VENDA DE MERCADORIA' : 'VENDA AO CONSUMIDOR',
+          local_destino: interestadual ? 2 : 1,
+          [String(d.documento).length === 14 ? 'cnpj_destinatario' : 'cpf_destinatario']: d.documento,
+          nome_destinatario: String(d.nome).slice(0, 60),
+          indicador_inscricao_estadual_destinatario: d.indicador_ie,
+          ...(d.indicador_ie === 1 ? { inscricao_estadual_destinatario: d.ie } : {}),
+          logradouro_destinatario: d.logradouro, numero_destinatario: d.numero, bairro_destinatario: d.bairro,
+          ...(d.complemento ? { complemento_destinatario: d.complemento } : {}),
+          municipio_destinatario: d.cidade, uf_destinatario: d.uf, cep_destinatario: d.cep, pais_destinatario: 'Brasil',
+        })
+        // fora de SP: 6102 para contribuinte, 6108 para não contribuinte (confirmar com o contador)
+        if (interestadual) for (const it of items as any[]) it.cfop = contribuinte ? '6102' : '6108'
+        destinatario = d
+      }
       if (cfg.f.serie) payload.serie = String(cfg.f.serie)
 
       const { data: nota, error: en } = await db.from('notas_fiscais').insert({
-        venda_id: v.id, loja_id: v.loja_id, cliente_id: clienteId, ref, ambiente: cfg.amb, status: 'processando', valor: totalNota, emitida_por: eu.id,
+        venda_id: v.id, loja_id: v.loja_id, cliente_id: clienteId, ref, modelo, ambiente: cfg.amb, status: 'processando', valor: totalNota, emitida_por: eu.id, destinatario,
       }).select('id').single()
       if (en) return erro(en.message, 500)
-      const r = await fetch(`${cfg.base}/nfce?ref=${encodeURIComponent(ref)}`, { method: 'POST', headers: { Authorization: cfg.auth, 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
+      const r = await fetch(`${cfg.base}/${modelo}?ref=${encodeURIComponent(ref)}`, { method: 'POST', headers: { Authorization: cfg.auth, 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
       const j = await r.json().catch(() => ({ status: 'erro_autorizacao', mensagem: `Focus NFe respondeu ${r.status}` }))
       if (!r.ok && !j.status) j.status = 'erro_autorizacao'
       return resp({ nota: await salvarResposta(nota.id, cfg.amb, j) })
@@ -157,17 +194,19 @@ Deno.serve(async (req) => {
       const { data: n } = await db.from('notas_fiscais').select('*').eq('id', b.nota_id).maybeSingle()
       if (!n) return erro('Nota não encontrada.', 404)
       if (!podeLoja(n.loja_id)) return erro('Nota de outra loja.', 403)
-      const cfg = await configDe(n.loja_id)
-      const base = `${HOST[n.ambiente as 'homologacao' | 'producao']}/v2`
+      const cfg = await configDe(n.loja_id, n.ambiente)
+      const base = `${cfg.base}/${n.modelo === 'nfe' ? 'nfe' : 'nfce'}`
       if (b.acao === 'consultar') {
-        const r = await fetch(`${base}/nfce/${encodeURIComponent(n.ref)}?completa=0`, { headers: { Authorization: cfg.auth } })
-        const j = await r.json()
+        const r = await fetch(`${base}/${encodeURIComponent(n.ref)}?completa=0`, { headers: { Authorization: cfg.auth } })
+        const j = await r.json().catch(() => ({}))
+        if (!r.ok || !j.status) return erro(j.mensagem || `Focus NFe não respondeu agora (${r.status}). Tente de novo.`, 502)
         return resp({ nota: await salvarResposta(n.id, n.ambiente, j) })
       }
       const just = String(b.justificativa || '').trim()
       if (just.length < 15 || just.length > 255) return erro('A justificativa precisa ter entre 15 e 255 caracteres.')
-      const r = await fetch(`${base}/nfce/${encodeURIComponent(n.ref)}`, { method: 'DELETE', headers: { Authorization: cfg.auth, 'Content-Type': 'application/json' }, body: JSON.stringify({ justificativa: just }) })
-      const j = await r.json()
+      const r = await fetch(`${base}/${encodeURIComponent(n.ref)}`, { method: 'DELETE', headers: { Authorization: cfg.auth, 'Content-Type': 'application/json' }, body: JSON.stringify({ justificativa: just }) })
+      const j = await r.json().catch(() => ({}))
+      if (j.status !== 'cancelado') return erro(`Cancelamento não aceito: ${j.mensagem_sefaz || j.mensagem || `Focus respondeu ${r.status}`}`)
       const extra = j.status === 'cancelado' ? { cancelada_em: new Date().toISOString(), motivo_cancelamento: just } : {}
       const atual = { ...n.resposta, ...j, status: j.status === 'cancelado' ? 'cancelado' : n.status }
       return resp({ nota: await salvarResposta(n.id, n.ambiente, { ...atual, mensagem_sefaz: j.mensagem_sefaz || j.mensagem }, extra) })
