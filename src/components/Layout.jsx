@@ -1,5 +1,5 @@
 import { NavLink } from 'react-router-dom'
-import { ReceiptText, PlusCircle, Glasses, LogOut, Store, BarChart3, Users, Wallet } from 'lucide-react'
+import { ReceiptText, PlusCircle, Glasses, LogOut, Store, BarChart3, Users, Wallet, FileText } from 'lucide-react'
 import { PERFIS } from '../lib/permissoes'
 import { useAuth } from '../lib/auth'
 import { cx } from './ui'
@@ -16,6 +16,7 @@ export default function Layout({ children }) {
     { to: '/fechamento', label: 'Fechamento de caixa', icon: Wallet },
     { to: '/relatorios', label: 'Relatórios', icon: BarChart3 },
     ...(perm.produtos ? [{ to: '/produtos', label: 'Lentes e preços', icon: Glasses }] : []),
+    ...(perm.produtos ? [{ to: '/nota-fiscal', label: 'Nota fiscal', icon: FileText }] : []),
     ...(perm.usuarios ? [{ to: '/usuarios', label: 'Usuários', icon: Users }] : []),
   ]
   const lojaCurta = perfil.loja?.nome?.replace('Óticas Idealize ', '')

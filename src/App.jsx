@@ -9,6 +9,7 @@ import Produtos from './pages/Produtos'
 import ImprimirOS from './pages/ImprimirOS'
 import Relatorios from './pages/Relatorios'
 import Fechamento from './pages/Fechamento'
+import NotaFiscal from './pages/NotaFiscal'
 import Usuarios from './pages/Usuarios'
 import { Spinner, Alert, Button } from './components/ui'
 
@@ -42,6 +43,7 @@ export default function App() {
               <Route path="/relatorios" element={<Relatorios />} />
               <Route path="/fechamento" element={<Fechamento />} />
               <Route path="/produtos" element={perm.produtos ? <Produtos /> : <Navigate to="/" />} />
+              <Route path="/nota-fiscal" element={perm.produtos ? <NotaFiscal /> : <Navigate to="/" />} />
               <Route path="/usuarios" element={perm.usuarios ? <Usuarios /> : <Navigate to="/" />} />
               <Route path="*" element={<Navigate to="/" />} />
             </Routes>

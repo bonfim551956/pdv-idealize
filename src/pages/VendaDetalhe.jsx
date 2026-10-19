@@ -6,6 +6,7 @@ import { brl, dataBR, dataHoraBR, grau, STATUS_OS } from '../lib/format'
 import { Button, Section, Spinner, Alert, Modal, Select, cx, useToast } from '../components/ui'
 import RecebimentoForm, { FORMAS } from '../features/recebimento/RecebimentoForm'
 import { StatusVenda } from './Vendas'
+import NotaFiscalVenda from '../features/fiscal/NotaFiscalVenda'
 
 const ROTULO_TIPO = { GARANTIA: 'Garantia', GARANTIA_VALOR: 'Garantia com valor', CORTESIA: 'Cortesia', CONSERTO: 'Conserto', TROCA: 'Troca' }
 const ICONES = { DINHEIRO: Banknote, PIX: QrCode, CARTEIRA_DIGITAL: Wallet, CARTAO: CreditCard, CARNE: FileText, BOLETO: Receipt, CHEQUE: Landmark, CREDITOS: Coins }
@@ -276,6 +277,10 @@ export default function VendaDetalhe() {
           </ul>
         </Section>
       </div>
+
+      {(venda.status === 'confirmada' || venda.status === 'cancelada') && Number(resumo.total) > 0 && (
+        <NotaFiscalVenda venda={venda} porCliente={porCliente} />
+      )}
 
       {osAbertas.length > 0 && (
         <Section title="Entrega ao cliente">
