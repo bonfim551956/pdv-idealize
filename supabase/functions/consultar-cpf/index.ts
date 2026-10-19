@@ -60,6 +60,7 @@ async function consultaSerpro(cpf: string, nasc: string): Promise<Serpro | null>
   const r = await fetch(`${base}/cpf/${cpf}/${paraSerpro(nasc)}`, { headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' } })
   if (r.status === 401) tokenCache = null
   const j = await r.json().catch(() => ({}))
+  console.log(`[cpf] serpro status=${r.status} erro=${j.erro || ''}`)
   if (r.status === 404 && j.erro === 'DATA_NASCIMENTO_DIVERGENTE') return { ok: false, divergente: true, erro: 'A data de nascimento não confere com a Receita. Confira com o cliente.' }
   if (r.status === 404) return { ok: false, erro: 'CPF não encontrado na Receita.' }
   if (r.status === 400) return { ok: false, erro: j.erroDescricao || 'Dados inválidos para a Receita.' }
@@ -77,6 +78,7 @@ async function consultaCpfHub(cpf: string) {
   const key = Deno.env.get('CPFHUB_API_KEY')
   if (!key) return null
   const r = await fetch(`https://api.cpfhub.io/cpf/${cpf}`, { headers: { 'x-api-key': key, Accept: 'application/json' } })
+  console.log(`[cpf] cpfhub status=${r.status}`)
   if (r.status === 404) return { achou: false as const }
   const j = await r.json().catch(() => ({}))
   if (r.status === 401 || r.status === 403) throw new Error('CPFHub recusou a chave. Confira o segredo CPFHUB_API_KEY.')
@@ -105,6 +107,7 @@ Deno.serve(async (req) => {
 
   const temSerpro = (Deno.env.get('SERPRO_AMBIENTE') || '').toLowerCase() === 'trial' || !!(Deno.env.get('SERPRO_CONSUMER_KEY') && Deno.env.get('SERPRO_CONSUMER_SECRET'))
   const temHub = !!Deno.env.get('CPFHUB_API_KEY')
+  console.log(`[cpf] pedido com_data=${!!nasc} cpfhub=${temHub} serpro=${temSerpro}`)
 
   // 1) cache: sem data, qualquer resultado salvo serve; com data, só se for a mesma
   const { data: c } = await admin.from('cpf_consultas').select('nome, nome_social, nascimento, situacao, fonte, consultado_em').eq('cpf', cpf).maybeSingle()
@@ -145,6 +148,7 @@ Deno.serve(async (req) => {
     await admin.from('cpf_consultas').upsert({ cpf, ...out, fonte, consultado_em: new Date().toISOString(), consultado_por: eu.id })
     return resp({ configurado: true, confere: !!s?.ok, fonte, ...out })
   } catch (e) {
+    console.log(`[cpf] falha: ${(e as Error).message}`)
     return resp({ configurado: true, erro: (e as Error).message })
   }
 })
