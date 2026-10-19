@@ -86,27 +86,36 @@ const ClienteFicha = forwardRef(function ClienteFicha({ empresaId, onClienteSalv
       return
     }
     setAvisoCpf(null)
-    if (dataCompleta(f.nascimento)) consultarReceita(doc, f.nascimento)
+    consultarReceita(doc, dataCompleta(f.nascimento) ? f.nascimento : null)
   }
 
-  // Cliente novo: com CPF + data de nascimento, a Receita (Serpro Consulta CPF v3) confirma e devolve o nome completo.
-  // A v3 não devolve a data de nascimento: ela é perguntada ao cliente e conferida com a Receita.
-  // Cada consulta é cobrada, então o mesmo par CPF + data não é consultado duas vezes.
+  // Cliente novo:
+  // - só com o CPF, a base de CPF traz nome e data de nascimento;
+  // - a Receita (Serpro Consulta CPF v3) confirma o par CPF + nascimento e o nome oficial.
+  // Cada consulta é cobrada, então o mesmo CPF + data não é consultado duas vezes.
   const ultimaConsulta = useRef('')
   const consultarReceita = async (cpfDig, nasc) => {
-    const chave = `${cpfDig}|${nasc}`
+    const chave = `${cpfDig}|${nasc || ''}`
     if (f.id || !cpfValido(cpfDig) || ultimaConsulta.current === chave) return
     ultimaConsulta.current = chave
     setBuscandoCpf(true)
-    const { data: rf } = await supabase.functions.invoke('consultar-cpf', { body: { cpf: cpfDig, nascimento: nasc } }).catch(() => ({ data: null }))
+    const { data: rf } = await supabase.functions.invoke('consultar-cpf', { body: { cpf: cpfDig, ...(nasc ? { nascimento: nasc } : {}) } }).catch(() => ({ data: null }))
     setBuscandoCpf(false)
     if (!rf || rf.configurado === false) return
-    if (rf.erro) { setAvisoCpf({ tom: 'warn', txt: rf.erro }); return }
+    if (rf.nascimento) ultimaConsulta.current = `${cpfDig}|${rf.nascimento}`
+    // preenche o que veio (nome sempre; nascimento só se ainda estiver vazio)
+    if (rf.nome || rf.nascimento) setF((x) => ({ ...x, nome: rf.nome || x.nome, nascimento: x.nascimento || rf.nascimento || '' }))
+    setErros((x) => ({ ...x, ...(rf.nome ? { nome: undefined } : {}), ...(rf.nascimento ? { nascimento: undefined } : {}) }))
+    const nascTxt = rf.nascimento ? `, nascido(a) em ${rf.nascimento.split('-').reverse().join('/')}` : ''
+    if (rf.erro) {
+      setAvisoCpf({ tom: 'warn', txt: rf.nome ? `${rf.nome}${nascTxt}. ${rf.erro}` : rf.erro })
+      return
+    }
+    if (rf.precisa_nascimento) { setAvisoCpf({ tom: 'warn', txt: 'Informe a data de nascimento: com ela o nome é confirmado na Receita.' }); return }
     if (!rf.nome) return
-    setF((x) => ({ ...x, nome: rf.nome }))
     const sit = rf.situacao && !/regular/i.test(rf.situacao) ? ` Atenção: situação do CPF na Receita é "${rf.situacao}".` : ''
     const social = rf.nome_social ? ` Nome social: ${rf.nome_social}.` : ''
-    setAvisoCpf({ tom: sit ? 'warn' : 'ok', txt: `Confirmado na Receita: ${rf.nome}.${social} Confira com o cliente.${sit}` })
+    setAvisoCpf({ tom: sit ? 'warn' : 'ok', txt: `${rf.confere ? 'Confirmado na Receita' : 'Encontrado'}: ${rf.nome}${nascTxt}.${social} Confira com o cliente.${sit}` })
   }
 
   // CEP preenche o endereço sozinho assim que tiver 8 dígitos (ViaCEP, com BrasilAPI de reserva)
@@ -140,6 +149,7 @@ const ClienteFicha = forwardRef(function ClienteFicha({ empresaId, onClienteSalv
     else if (!cpfValido(f.documento)) e.documento = 'CPF inválido'
     if (soDigitos(f.celular).length < 10) e.celular = 'Celular com DDD'
     if (!f.origem) e.origem = 'Obrigatório'
+    if (!dataCompleta(f.nascimento)) e.nascimento = 'Obrigatória (usada no pós-venda)'
     // Endereço obrigatório
     if (soDigitos(f.cep).length !== 8) e.cep = 'CEP com 8 dígitos'
     if (!f.logradouro.trim()) e.logradouro = 'Obrigatório'
@@ -246,12 +256,12 @@ const ClienteFicha = forwardRef(function ClienteFicha({ empresaId, onClienteSalv
             </div>
           )}
         </Field>
-        <Field label="Data de nascimento" hint={!f.id ? 'Com CPF + nascimento, o nome vem da Receita' : undefined}>
-          {({ id }) => (
-            <Input id={id} type="date" max={new Date().toISOString().slice(0, 10)} value={f.nascimento}
+        <Field label="Data de nascimento" required error={erros.nascimento} hint={!f.id ? 'Vem sozinha pelo CPF; se não vier, pergunte ao cliente' : undefined}>
+          {({ id, invalid }) => (
+            <Input id={id} invalid={invalid} type="date" max={new Date().toISOString().slice(0, 10)} value={f.nascimento}
               onChange={(e) => {
                 const v = e.target.value
-                setF((x) => ({ ...x, nascimento: v }))
+                setF((x) => ({ ...x, nascimento: v })); setErros((x) => ({ ...x, nascimento: undefined }))
                 if (dataCompleta(v) && soDigitos(f.documento).length === 11) consultarReceita(soDigitos(f.documento), v)
               }} />
           )}

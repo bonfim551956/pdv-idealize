@@ -33,8 +33,23 @@ function NovoClienteModal({ open, onOpenChange, empresaId, nomeInicial, onCriado
   const [erro, setErro] = useState(null)
   const [salvando, setSalvando] = useState(false)
 
-  useEffect(() => { if (open) { setF((x) => ({ ...x, nome: nomeInicial || '' })); setErros({}); setErro(null) } }, [open, nomeInicial])
-  const set = (k) => (e) => setF((x) => ({ ...x, [k]: e.target.value }))
+  useEffect(() => { if (open) { setF((x) => ({ ...x, nome: nomeInicial || '' })); setErros({}); setErro(null); setAviso(null) } }, [open, nomeInicial])
+  const set = (k) => (e) => { setF((x) => ({ ...x, [k]: e.target.value })); setErros((x) => ({ ...x, [k]: undefined })) }
+  const [aviso, setAviso] = useState(null)
+  const [buscando, setBuscando] = useState(false)
+
+  // CPF completo: busca nome e data de nascimento (base de CPF + confirmação na Receita)
+  const buscarCpf = async (doc) => {
+    const d = soDigitos(doc)
+    if (d.length !== 11 || !cpfValido(d)) return
+    setBuscando(true); setAviso(null)
+    const { data: rf } = await supabase.functions.invoke('consultar-cpf', { body: { cpf: d } }).catch(() => ({ data: null }))
+    setBuscando(false)
+    if (!rf || rf.configurado === false) return
+    if (rf.nome || rf.nascimento) setF((x) => ({ ...x, nome: x.nome.trim() ? x.nome : rf.nome || '', nascimento: x.nascimento || rf.nascimento || '' }))
+    if (rf.erro) setAviso({ tom: 'warn', txt: rf.erro })
+    else if (rf.nome) setAviso({ tom: 'ok', txt: `${rf.confere ? 'Confirmado na Receita' : 'Encontrado'}: ${rf.nome}. Confira com o cliente.` })
+  }
 
   const salvar = async (e) => {
     e.preventDefault()
@@ -43,6 +58,7 @@ function NovoClienteModal({ open, onOpenChange, empresaId, nomeInicial, onCriado
     if (principal && !f.documento) er.documento = 'Obrigatório'
     else if (f.documento && !cpfValido(f.documento)) er.documento = 'CPF inválido'
     if (soDigitos(f.celular).length < 10) er.celular = 'Informe um celular com DDD'
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(f.nascimento) || +f.nascimento.slice(0, 4) < 1900) er.nascimento = 'Obrigatória (usada no pós-venda)'
     if (!principal && !f.origem) er.origem = 'Escolha como o cliente chegou'
     setErros(er)
     if (Object.keys(er).length) return
@@ -73,15 +89,17 @@ function NovoClienteModal({ open, onOpenChange, empresaId, nomeInicial, onCriado
     <Modal open={open} onOpenChange={onOpenChange} title="Cadastrar cliente">
       <form onSubmit={salvar} className="flex flex-col gap-4" noValidate>
         {erro && <Alert>{erro}</Alert>}
+        {aviso && <Alert tone={aviso.tom}>{aviso.txt}</Alert>}
         <Field label="Nome completo" required error={erros.nome}>
           {({ id, invalid }) => <Input id={id} invalid={invalid} value={f.nome} onChange={set('nome')} autoFocus />}
         </Field>
         <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="CPF" required={!!principal} error={erros.documento}>
-            {({ id, invalid }) => <Input id={id} invalid={invalid} inputMode="numeric" value={f.documento} onChange={(e) => setF((x) => ({ ...x, documento: mascaraCPF(e.target.value) }))} placeholder="000.000.000-00" />}
+          <Field label="CPF" required={!!principal} error={erros.documento} hint={buscando ? 'Buscando nome e nascimento…' : undefined}>
+            {({ id, invalid }) => <Input id={id} invalid={invalid} inputMode="numeric" value={f.documento} placeholder="000.000.000-00"
+              onChange={(e) => { const v = mascaraCPF(e.target.value); setF((x) => ({ ...x, documento: v })); if (soDigitos(v).length === 11 && soDigitos(v) !== soDigitos(f.documento)) buscarCpf(v) }} />}
           </Field>
-          <Field label="Data de nascimento">
-            {({ id }) => <Input id={id} type="date" value={f.nascimento} onChange={set('nascimento')} />}
+          <Field label="Data de nascimento" required error={erros.nascimento}>
+            {({ id, invalid }) => <Input id={id} invalid={invalid} type="date" max={new Date().toISOString().slice(0, 10)} value={f.nascimento} onChange={set('nascimento')} />}
           </Field>
           <Field label="Celular / WhatsApp" required error={erros.celular}>
             {({ id, invalid }) => <Input id={id} invalid={invalid} inputMode="tel" value={f.celular} onChange={(e) => setF((x) => ({ ...x, celular: mascaraFone(e.target.value) }))} placeholder="(15) 99999-9999" />}
