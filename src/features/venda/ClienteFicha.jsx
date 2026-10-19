@@ -78,9 +78,20 @@ const ClienteFicha = forwardRef(function ClienteFicha({ empresaId, onClienteSalv
     const { data } = await supabase.from('clientes').select('id, nome, documento').eq('documento', doc).limit(1).maybeSingle()
     setBuscandoCpf(false)
     if (data) {
+      setBuscandoCpf(false)
       await escolher(data)
       setAvisoCpf(`Cliente encontrado pelo CPF: ${data.nome}. Os dados foram preenchidos; confira com o cliente.`)
-    } else setAvisoCpf(null)
+      return
+    }
+    setAvisoCpf(null)
+    // Cliente novo: busca nome completo e nascimento na Receita (Serpro), sem sobrescrever o que já foi digitado
+    setBuscandoCpf(true)
+    const { data: rf } = await supabase.functions.invoke('consultar-cpf', { body: { cpf: doc } }).catch(() => ({ data: null }))
+    setBuscandoCpf(false)
+    if (!rf || rf.configurado === false || rf.erro || !rf.nome) return
+    setF((x) => ({ ...x, nome: x.nome.trim() ? x.nome : rf.nome, nascimento: x.nascimento || rf.nascimento || '' }))
+    const sit = rf.situacao && !/regular/i.test(rf.situacao) ? ` Atenção: situação do CPF na Receita é "${rf.situacao}".` : ''
+    setAvisoCpf(`Dados da Receita: ${rf.nome}${rf.nascimento ? `, nascido(a) em ${rf.nascimento.split('-').reverse().join('/')}` : ''}. Confira com o cliente.${sit}`)
   }
 
   // CEP preenche o endereço sozinho assim que tiver 8 dígitos (ViaCEP, com BrasilAPI de reserva)
@@ -208,7 +219,7 @@ const ClienteFicha = forwardRef(function ClienteFicha({ empresaId, onClienteSalv
       {/* Dados obrigatórios */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {campo('nome', 'Nome completo', { wrap: 'sm:col-span-2' }, true)}
-        <Field label="CPF" required error={erros.documento} hint={buscandoCpf ? 'Procurando cadastro…' : undefined}>
+        <Field label="CPF" required error={erros.documento} hint={buscandoCpf ? 'Procurando cadastro e dados na Receita…' : undefined}>
           {({ id, invalid }) => (
             <div className="relative">
               <Input id={id} invalid={invalid} inputMode="numeric" placeholder="000.000.000-00" className="num pr-9" value={f.documento}
