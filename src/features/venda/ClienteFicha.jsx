@@ -97,12 +97,13 @@ const ClienteFicha = forwardRef(function ClienteFicha({ empresaId, onClienteSalv
   const consultarReceita = async (cpfDig, nasc) => {
     const chave = `${cpfDig}|${nasc || ''}`
     if (f.id || !cpfValido(cpfDig) || ultimaConsulta.current === chave) return
-    ultimaConsulta.current = chave
     setBuscandoCpf(true)
     const { data: rf } = await supabase.functions.invoke('consultar-cpf', { body: { cpf: cpfDig, ...(nasc ? { nascimento: nasc } : {}) } }).catch(() => ({ data: null }))
     setBuscandoCpf(false)
-    if (!rf || rf.configurado === false) return
-    if (rf.nascimento) ultimaConsulta.current = `${cpfDig}|${rf.nascimento}`
+    if (!rf) { setAvisoCpf({ tom: 'warn', txt: 'Não foi possível consultar o CPF agora. Preencha manualmente.' }); return }
+    if (rf.configurado === false) return
+    // só não repete a mesma consulta quando ela trouxe resultado (cada consulta é cobrada)
+    if (rf.nome) ultimaConsulta.current = rf.nascimento ? `${cpfDig}|${rf.nascimento}` : chave
     // preenche o que veio (nome sempre; nascimento só se ainda estiver vazio)
     if (rf.nome || rf.nascimento) setF((x) => ({ ...x, nome: rf.nome || x.nome, nascimento: x.nascimento || rf.nascimento || '' }))
     setErros((x) => ({ ...x, ...(rf.nome ? { nome: undefined } : {}), ...(rf.nascimento ? { nascimento: undefined } : {}) }))
