@@ -15,7 +15,7 @@ export function AuthProvider({ children }) {
     if (!s) { setPerfil(null); return }
     const { data, error } = await supabase
       .from('colaboradores')
-      .select('id, nome, usuario, cargo, loja_id, loja:lojas(id, nome, cidade, empresa_id)')
+      .select('id, nome, usuario, cargo, loja_id, desconto_max_pct, loja:lojas(id, nome, cidade, empresa_id)')
       .eq('auth_user_id', s.user.id)
       .maybeSingle()
     setErroPerfil(error || (!data ? { message: 'Login sem colaborador vinculado.' } : null))

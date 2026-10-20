@@ -312,6 +312,25 @@ function Analitico({ d }) {
         <Section title="Por origem do cliente">
           <Barras itens={d.por_origem} rotulo={(x) => x.origem} valor={(x) => x.total} detalhe={(x) => `${x.vendas} vendas · ${brl(x.total)} ·`} cor="bg-accent" />
         </Section>
+        {d.extras && (
+          <Section title="Cores de lente mais vendidas">
+            {d.extras.por_cor.length === 0 ? <p className="text-sm text-muted">Nenhuma lente com cor vendida no período.</p>
+              : <Barras itens={d.extras.por_cor} rotulo={(x) => x.cor} valor={(x) => x.pecas} detalhe={(x) => `${x.oculos} óculos ·`} />}
+          </Section>
+        )}
+        {d.extras && (
+          <Section title="Proposta A ou B (upsell)">
+            {n(d.extras.upsell.oferecido) === 0 ? <p className="text-sm text-muted">Nenhuma proposta registrada no período.</p> : (
+              <div className="flex flex-col gap-3 text-sm">
+                <div className="grid grid-cols-2 gap-3">
+                  <Kpi rotulo="Propostas feitas" valor={d.extras.upsell.oferecido} sub={`${pct(n(d.extras.upsell.a) + n(d.extras.upsell.b), n(d.extras.upsell.oferecido))} aceitas`} cor="text-brand" />
+                  <Kpi rotulo="Acréscimo nas vendas" valor={brl(d.extras.upsell.acrescimo)} sub={`A: ${d.extras.upsell.a} · B: ${d.extras.upsell.b} · seguiu: ${d.extras.upsell.nenhuma}`} />
+                </div>
+                <Barras itens={d.extras.upsell.por_consultor} rotulo={(x) => x.consultor} valor={(x) => x.aceitou} detalhe={(x) => `${x.aceitou} de ${x.oferecido} ·`} cor="bg-accent" />
+              </div>
+            )}
+          </Section>
+        )}
       </div>
     </>
   )
@@ -419,11 +438,11 @@ export default function RelatoriosExtra({ visao, ini, fim, loja, isAdmin }) {
     let ativo = true
     setD(null); setRecs(null)
     const args = { p_ini: ini.toISOString(), p_fim: fim.toISOString(), p_loja: loja || null }
-    Promise.all([supabase.rpc('relatorio_extra', args), supabase.rpc('relatorio_recebimentos', args)]).then(([a, b]) => {
+    Promise.all([supabase.rpc('relatorio_extra', args), supabase.rpc('relatorio_recebimentos', args), supabase.rpc('relatorio_cores_upsell', args)]).then(([a, b, c]) => {
       if (!ativo) return
       const error = a.error || b.error
       if (error) { setErro(mensagemErro(error)); setD({}); setRecs([]); return }
-      setErro(null); setD(a.data); setRecs(b.data || [])
+      setErro(null); setD({ ...a.data, extras: c.data || null }); setRecs(b.data || [])
     })
     return () => { ativo = false }
   }, [ini.getTime(), fim.getTime(), loja]) // eslint-disable-line react-hooks/exhaustive-deps

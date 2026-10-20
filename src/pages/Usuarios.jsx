@@ -3,7 +3,7 @@ import { UserPlus, KeyRound, Pencil, Power, Search, ShieldCheck } from 'lucide-r
 import { supabase, mensagemErro } from '../lib/supabase'
 import { useAuth } from '../lib/auth'
 import { PERFIS, perfisGerenciaveis } from '../lib/permissoes'
-import { Button, Field, Input, Select, Modal, Alert, Spinner, Section, Chips, cx, useToast } from '../components/ui'
+import { Button, Field, Input, Select, Modal, Alert, Spinner, Section, Chips, Switch, cx, useToast } from '../components/ui'
 
 const nomeLoja = (n) => (n || '').replace('Óticas Idealize ', '')
 const COR_PERFIL = {
@@ -161,7 +161,7 @@ export default function Usuarios() {
 
   const carregar = useCallback(async () => {
     const [c, l] = await Promise.all([
-      supabase.from('colaboradores').select('id, nome, usuario, cargo, ativo, loja_id, auth_user_id, loja:lojas(nome)').order('nome'),
+      supabase.from('colaboradores').select('id, nome, usuario, cargo, ativo, loja_id, auth_user_id, desconto_max_pct, loja:lojas(nome)').order('nome'),
       supabase.from('lojas').select('id, nome').eq('ativo', true).order('nome'),
     ])
     if (c.error || l.error) { setErro(mensagemErro(c.error || l.error)); setLista([]); return }
@@ -226,12 +226,13 @@ export default function Usuarios() {
                 <th className="px-4 py-3 font-medium">Usuário</th>
                 <th className="px-4 py-3 font-medium">Perfil</th>
                 <th className="px-4 py-3 font-medium">Loja</th>
+                <th className="px-4 py-3 font-medium">Desconto máx.</th>
                 <th className="px-4 py-3 text-right font-medium">Ações</th>
               </tr>
             </thead>
             <tbody>
               {filtrada.length === 0 && (
-                <tr><td colSpan={5} className="px-4 py-8 text-center text-muted">Nenhum usuário encontrado.</td></tr>
+                <tr><td colSpan={6} className="px-4 py-8 text-center text-muted">Nenhum usuário encontrado.</td></tr>
               )}
               {filtrada.map((u) => {
                 const gerivel = podeGerir(u) && u.id !== perfil.id
@@ -245,6 +246,13 @@ export default function Usuarios() {
                     <td className="num px-4 py-3">{u.usuario || '—'}</td>
                     <td className="px-4 py-3"><PerfilBadge cargo={u.cargo} /></td>
                     <td className="px-4 py-3">{nomeLoja(u.loja?.nome)}</td>
+                    <td className="px-4 py-3">
+                      {perm.nivel >= 3 ? (
+                        <button type="button" onClick={() => setModal({ tipo: 'desconto', usuario: u })} className="num underline decoration-dotted underline-offset-4 hover:text-brand">
+                          {u.desconto_max_pct == null ? 'Sem limite' : `${String(Number(u.desconto_max_pct)).replace('.', ',')}%`}
+                        </button>
+                      ) : <span className="num">{u.desconto_max_pct == null ? 'Sem limite' : `${String(Number(u.desconto_max_pct)).replace('.', ',')}%`}</span>}
+                    </td>
                     <td className="px-4 py-3">
                       {podeGerir(u) ? (
                         <div className="flex justify-end gap-1">
@@ -285,6 +293,9 @@ export default function Usuarios() {
       <Modal open={modal?.tipo === 'senha'} onOpenChange={(v) => !v && fechar()} title="Redefinir senha">
         {modal?.tipo === 'senha' && <FormSenha usuario={modal.usuario} onSalvo={salvo} onCancelar={fechar} />}
       </Modal>
+      <Modal open={modal?.tipo === 'desconto'} onOpenChange={(v) => !v && fechar()} title={`Desconto máximo · ${modal?.usuario?.nome || ''}`}>
+        {modal?.tipo === 'desconto' && <FormDesconto usuario={modal.usuario} onSalvo={salvo} onCancelar={fechar} />}
+      </Modal>
       <Modal open={modal?.tipo === 'status'} onOpenChange={(v) => !v && fechar()} title={modal?.usuario?.ativo ? 'Desativar usuário?' : 'Reativar usuário?'}>
         {modal?.tipo === 'status' && (
           <div className="flex flex-col gap-6">
@@ -303,5 +314,40 @@ export default function Usuarios() {
         )}
       </Modal>
     </div>
+  )
+}
+
+// Limite de desconto que a pessoa dá sem autorização (e até quanto ela autoriza, se for gerente)
+function FormDesconto({ usuario, onSalvo, onCancelar }) {
+  const toast = useToast()
+  const [semLimite, setSemLimite] = useState(usuario.desconto_max_pct == null)
+  const [pct, setPct] = useState(usuario.desconto_max_pct == null ? '15' : String(Number(usuario.desconto_max_pct)).replace('.', ','))
+  const [erro, setErro] = useState(null)
+  const [salvando, setSalvando] = useState(false)
+  const salvar = async (e) => {
+    e.preventDefault()
+    const v = semLimite ? null : Number(String(pct).replace(',', '.'))
+    if (!semLimite && !(v >= 0 && v <= 100)) { setErro('Informe um percentual entre 0 e 100.'); return }
+    setSalvando(true); setErro(null)
+    const { error } = await supabase.rpc('definir_desconto_max', { p_colab: usuario.id, p_pct: v })
+    setSalvando(false)
+    if (error) { setErro(mensagemErro(error)); return }
+    toast('Limite de desconto salvo'); onSalvo()
+  }
+  return (
+    <form onSubmit={salvar} className="flex flex-col gap-4" noValidate>
+      <p className="text-sm text-muted">Até esse percentual a pessoa dá desconto sozinha. Acima disso, o gerente autoriza com a senha dele. Para gerente, é também até quanto ele pode autorizar.</p>
+      {erro && <Alert>{erro}</Alert>}
+      <Switch checked={semLimite} onCheckedChange={setSemLimite} label="Sem limite" />
+      {!semLimite && (
+        <Field label="Desconto máximo (%)" required>
+          {({ id }) => <Input id={id} inputMode="decimal" className="num w-32" value={pct} onChange={(e) => setPct(e.target.value.replace(/[^\d,.]/g, ''))} autoFocus />}
+        </Field>
+      )}
+      <div className="flex justify-end gap-2">
+        <Button type="button" variant="ghost" onClick={onCancelar}>Cancelar</Button>
+        <Button type="submit" loading={salvando}>Salvar</Button>
+      </div>
+    </form>
   )
 }

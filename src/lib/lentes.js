@@ -39,3 +39,23 @@ export function buscarLentes(lentes, q) {
     return termos.every((t) => palavras.some((p) => p.startsWith(t)))
   })
 }
+
+// Cor da lente (dado de venda, não muda o preço): lentes com cor, fotossensíveis, Transitions, solares e coloridas
+const CORES_TRANSITIONS = ['Cinza', 'Marrom', 'Grafite', 'Safira', 'Ametista', 'Âmbar', 'Esmeralda', 'Rubi']
+const CORES_FOTO = ['Cinza', 'Marrom']
+const CORES_COLORACAO = ['Cinza', 'Marrom', 'Verde', 'Azul', 'Rosa', 'Amarelo', 'Degradê', 'Outra']
+export function coresDaLente(l) {
+  if (!l) return []
+  const a = l.atributos || {}
+  const t = normalizar(`${a.tratamento || ''} ${a.variante || ''} ${l.nome}`)
+  const daTabela = String(a.cores || '')
+    .replace(/\([^)]*\)/g, '')
+    .split(/[,/]| e /)
+    .map((c) => c.trim())
+    .filter(Boolean)
+  if (daTabela.length) return [...new Set(daTabela)]
+  if (/transitions/.test(t)) return CORES_TRANSITIONS
+  if (/fotocrom|fotossens|photofusion|adaptivesun|sensity/.test(t)) return CORES_FOTO
+  if (/colora|farb|solar|polariz|xperio|umbra|tingid/.test(t)) return CORES_COLORACAO
+  return []
+}

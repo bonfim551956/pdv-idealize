@@ -79,6 +79,20 @@ Deno.serve(async (req) => {
       return resp({ ok: true })
     }
 
+    // ---------- Arquivos para a contabilidade: backups mensais da Focus (ZIP de XMLs e DANFEs) ----------
+    if (b.acao === 'backups') {
+      if (!podeLoja(b.loja_id)) return erro('Loja sem acesso.', 403)
+      const { data: f } = await db.from('lojas_fiscal').select('token_producao, token_homologacao').eq('loja_id', b.loja_id).maybeSingle()
+      const amb: 'producao' | 'homologacao' = f?.token_producao ? 'producao' : 'homologacao'
+      const cfg = await configDe(b.loja_id, amb)
+      const r = await fetch(`${cfg.base}/backups/${so(cfg.l.cnpj)}.json`, { headers: { Authorization: cfg.auth } })
+      const j = await r.json().catch(() => null)
+      if (r.status === 403) return erro('A Focus não liberou os backups para este token. No painel da Focus, confira se a empresa tem acesso aos backups (ou use o token principal da conta).')
+      if (!r.ok || !Array.isArray(j)) return erro(`Focus NFe não devolveu os backups agora (${r.status}).`, 502)
+      const url = (c?: string) => (c ? (c.startsWith('http') ? c : HOST[amb] + c) : null)
+      return resp({ ambiente: amb, meses: j.map((x: any) => ({ mes: x.mes, xmls: url(x.xmls), danfes: url(x.danfes) })).sort((a: any, z: any) => String(z.mes).localeCompare(String(a.mes))) })
+    }
+
     // ---------- Emitir ----------
     if (b.acao === 'emitir') {
       const { data: v } = await db.from('vendas').select('id, numero, status, loja_id, cliente_id, total_liquido').eq('id', b.venda_id).maybeSingle()

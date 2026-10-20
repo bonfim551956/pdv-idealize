@@ -139,7 +139,7 @@ function TabelaReceita({ os, prisma }) {
 
 function LenteArmacao({ os }) {
   const lentes = [...(os.lentes || [])].sort((a, b) => a.olho.localeCompare(b.olho))
-  const iguais = lentes.length === 2 && lentes[0].produto?.sku === lentes[1].produto?.sku
+  const iguais = lentes.length === 2 && lentes[0].produto?.sku === lentes[1].produto?.sku && (lentes[0].cor || '') === (lentes[1].cor || '')
   const a = um(os.armacao)
   const medidas = a && [['MHA', a.mha], ['MVA', a.mva], ['Ponte', a.ponte], ['DMA', a.dma]].filter(([, v]) => v != null).map(([k, v]) => `${k} ${mm(v)}`).join(' · ')
   return (
@@ -147,9 +147,9 @@ function LenteArmacao({ os }) {
       <div>
         <Rotulo>Lente</Rotulo>
         {iguais ? (
-          <p><b>{lentes[0].produto?.nome}</b> <span className="text-[#4E6468]">· {lentes[0].produto?.sku} · ambos os olhos</span></p>
+          <p><b>{lentes[0].produto?.nome}{lentes[0].cor ? ` · cor ${lentes[0].cor}` : ''}</b> <span className="text-[#4E6468]">· {lentes[0].produto?.sku} · ambos os olhos</span></p>
         ) : lentes.map((l) => (
-          <p key={l.olho}><b>{l.olho}</b> {l.produto?.nome} <span className="text-[#4E6468]">· {l.produto?.sku}</span></p>
+          <p key={l.olho}><b>{l.olho}</b> {l.produto?.nome}{l.cor ? <b>{` · cor ${l.cor}`}</b> : ''} <span className="text-[#4E6468]">· {l.produto?.sku}</span></p>
         ))}
       </div>
       <div>
@@ -527,7 +527,7 @@ export default function ImprimirOS() {
         paciente_id, paciente:clientes(id, nome, documento, contatos:cliente_contatos(valor, principal)), laboratorio:laboratorios(nome),
         receitas(olho, esferico_longe, cilindrico, eixo, adicao, esferico_perto, prisma, prisma_base),
         armacao:os_armacao(mha, mva, ponte, dma, tipo, modelo_desenho, enviar_montagem, clipon, produto:produtos(sku, nome)),
-        lentes:os_lentes(olho, dnp, altura, produto:produtos(sku, nome))),
+        lentes:os_lentes(olho, dnp, altura, cor, produto:produtos(sku, nome))),
       recebimentos(forma, valor, modalidade, parcelas, bandeira, status, pagador_id, detalhe:recebimento_parcelas(numero, valor, vencimento, documento))
     `).eq('id', id).single().then(({ data, error }) => {
       if (error) setErro(mensagemErro(error))

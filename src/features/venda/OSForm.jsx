@@ -4,7 +4,7 @@ import { brl, somaDias, hojeISO } from '../../lib/format'
 import { olhoVazio } from '../../lib/receita'
 import { Field, Input, Select, Switch, Chips, Section, Button, Textarea, cx } from '../../components/ui'
 import ReceitaGrid from './ReceitaGrid'
-import { normalizar, textoBusca } from '../../lib/lentes'
+import { normalizar, textoBusca, coresDaLente, ORDEM_TRAT, ROTULO_TRAT, GRUPOS, ROTULO_GRUPO, ORDEM_CAT, ROTULO_CAT, rotuloIndice } from '../../lib/lentes'
 import ReceitaExameModal, { receitaDoExame } from './ReceitaExameModal'
 
 export const TIPOS_ARO = [
@@ -33,7 +33,7 @@ export const novaOS = (letra, oculos = 1) => ({
   observacoes: '',
   receita: { OD: olhoVazio(), OE: olhoVazio() },
   armacao: { propria: false, produto: null, mha: '', mva: '', ponte: '', dma: '', tipo: '', modelo_desenho: '', enviar_montagem: true, clipon: false },
-  lentes: { mesma: true, OD: { produto: null, dnp: '', altura: '' }, OE: { produto: null, dnp: '', altura: '' } },
+  lentes: { mesma: true, OD: { produto: null, cor: '', dnp: '', altura: '' }, OE: { produto: null, cor: '', dnp: '', altura: '' } },
 })
 
 /* ---------- Lente: filtros encadeados ---------- */
@@ -84,22 +84,111 @@ function BuscaLente({ lentes, onEscolher }) {
   )
 }
 
-function LenteSelector({ lentes, value, onChange, cor }) {
-  // Só a busca por nome/SKU: os botões de filtro foram retirados para simplificar
-  const escolherDaBusca = (l) => onChange(l)
+function LenteSelector({ lentes, value, onChange, cor, corLente, onCor, erroCor }) {
+  // Escolha guiada por botões: fabricante → tipo → marca → lente → resina → filtro → tratamento → cor.
+  // A busca por nome/SKU continua em cima, para quem já sabe o que quer.
+  const PASSOS = ['grupo', 'categoria', 'marca', 'linha', 'indice', 'variante', 'tratamento']
+  const val = (l, k) => {
+    const a = l.atributos || {}
+    if (k === 'grupo') return a.fabricante || 'IDEALIZE'
+    if (k === 'marca') return a.marca || 'IDEALIZE'
+    if (k === 'variante') return a.variante || ''
+    if (k === 'indice') return Number(a.indice)
+    return a[k]
+  }
+  const doProduto = (l) => Object.fromEntries(PASSOS.map((k) => [k, val(l, k)]))
+  const vazio = Object.fromEntries(PASSOS.map((k) => [k, null]))
+  const [sel, setSel] = useState(value ? doProduto(value) : vazio)
+  // lente trocada por fora (ex.: "mesma lente" ou busca do outro olho): acompanha
+  useEffect(() => { setSel(value ? doProduto(value) : (s) => (PASSOS.every((k) => s[k] !== null) ? vazio : s)) }, [value?.id]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const opcoes = (s, k) => {
+    const ant = PASSOS.slice(0, PASSOS.indexOf(k))
+    return [...new Set(lentes.filter((l) => ant.every((x) => s[x] === null || val(l, x) === s[x])).map((l) => val(l, k)))]
+  }
+  const ordenar = (k, arr) => {
+    if (k === 'indice') return arr.sort((a, b) => a - b)
+    if (k === 'tratamento') return arr.sort((a, b) => (ORDEM_TRAT.indexOf(a) + 1 || 99) - (ORDEM_TRAT.indexOf(b) + 1 || 99) || String(a).localeCompare(String(b)))
+    if (k === 'marca') return arr.sort((a, b) => (a === 'IDEALIZE' ? -1 : b === 'IDEALIZE' ? 1 : a.localeCompare(b)))
+    if (k === 'categoria') return arr.sort((a, b) => ORDEM_CAT.indexOf(a) - ORDEM_CAT.indexOf(b))
+    if (k === 'grupo') return arr.sort((a, b) => GRUPOS.indexOf(a) - GRUPOS.indexOf(b))
+    if (k === 'linha') {
+      // linhas Idealize na ordem de preço (Light, Extra, Rubi, Saphira / 45%…98%)
+      const menor = (v) => Math.min(...lentes.filter((l) => val(l, 'linha') === v).map((l) => Number(l.preco) || 1e9))
+      return arr.sort((a, b) => menor(a) - menor(b))
+    }
+    return arr.sort((a, b) => String(a).localeCompare(String(b)))
+  }
+
+  const escolher = (k, v) => {
+    const i = PASSOS.indexOf(k)
+    const novo = { ...sel, [k]: v }
+    PASSOS.slice(i + 1).forEach((x) => (novo[x] = null))
+    if (v !== null) {
+      // etapas com uma única opção já ficam escolhidas
+      for (const x of PASSOS.slice(i + 1)) {
+        const op = opcoes(novo, x)
+        if (op.length === 1) novo[x] = op[0]
+        else break
+      }
+    }
+    setSel(novo)
+    const prod = PASSOS.every((x) => novo[x] !== null) ? lentes.find((l) => PASSOS.every((x) => val(l, x) === novo[x])) : null
+    onChange(prod || null)
+  }
+  const escolherDaBusca = (l) => { setSel(doProduto(l)); onChange(l) }
+
+  const ROTULOS = { grupo: 'Lentes', categoria: 'Tipo', marca: 'Marca', linha: 'Lente', indice: 'Resina', variante: 'Filtro', tratamento: 'Tratamento' }
+  const rotuloOpcao = (k, v) => {
+    if (k === 'grupo') return ROTULO_GRUPO[v] || v
+    if (k === 'categoria') return ROTULO_CAT[v] || v
+    if (k === 'marca') return v === 'IDEALIZE' ? 'Idealize' : v.charAt(0) + v.slice(1).toLowerCase()
+    if (k === 'linha') return String(v).replace('MULTIFOCAL ', '').replace(/^ZEISS /, '')
+    if (k === 'indice') {
+      const mats = [...new Set(lentes.filter((l) => PASSOS.slice(0, 4).every((x) => val(l, x) === sel[x]) && val(l, 'indice') === v).map((l) => l.atributos.material).filter(Boolean))]
+      const nome = mats.length === 1 && !/^\d/.test(mats[0]) ? ` ${mats[0].charAt(0)}${mats[0].slice(1).toLowerCase()}` : v === 1.59 ? ' Policarbonato' : ''
+      return `${rotuloIndice(v)}${nome}`
+    }
+    if (k === 'variante') return v || 'Incolor'
+    return ROTULO_TRAT[v] || v
+  }
+  const cores = coresDaLente(value)
 
   return (
     <div className="flex flex-col gap-4">
       <BuscaLente lentes={lentes} onEscolher={escolherDaBusca} />
+      <p className="-mt-2 text-xs text-muted">ou escolha por etapas: lente, resina, tratamento e cor</p>
+      {PASSOS.map((k, i) => {
+        if (i > 0 && sel[PASSOS[i - 1]] === null) return null
+        const op = ordenar(k, opcoes(sel, k))
+        if (!['grupo', 'categoria', 'linha', 'indice', 'tratamento'].includes(k) && op.length <= 1) return null
+        return (
+          <div key={k} className="flex flex-col gap-2">
+            <span className="text-sm font-medium text-muted">{ROTULOS[k]}</span>
+            <Chips label={ROTULOS[k]} value={sel[k]} onChange={(v) => escolher(k, v)}
+              options={op.map((v) => ({ value: v, label: rotuloOpcao(k, v) }))} />
+          </div>
+        )
+      })}
+      {value && cores.length > 0 && (
+        <div className="flex flex-col gap-2">
+          <span className="text-sm font-medium text-muted">Cor <span className="text-danger">*</span></span>
+          <Chips label="Cor" value={corLente || null} onChange={(v) => onCor(v)} options={cores.map((c) => ({ value: c, label: c }))} />
+          {erroCor && !corLente && <p className="text-xs text-danger" role="alert">{erroCor}</p>}
+        </div>
+      )}
       {value && (
-        <div className={cx('flex items-center justify-between rounded-md border-l-4 bg-surface px-4 py-3', cor === 'oe' ? 'border-oe' : 'border-od')}>
+        <div className={cx('flex items-center justify-between gap-4 rounded-md border-l-4 bg-surface px-4 py-3', cor === 'oe' ? 'border-oe' : 'border-od')}>
           <div>
-            <p className="font-semibold">{value.nome}</p>
+            <p className="font-semibold">{value.nome}{corLente ? ` · ${corLente}` : ''}</p>
             <p className="text-xs text-muted num">SKU {value.sku}</p>
           </div>
-          <p className={cx('num font-semibold', Number(value.preco) === 0 && 'text-warn')}>
-            {Number(value.preco) === 0 ? 'Sem preço' : `${brl(value.preco)} / peça · par ${brl(value.preco * 2)} ou 10x ${brl(Math.ceil(value.preco * 2 * 10) / 100)}`}
-          </p>
+          <div className="flex items-center gap-3">
+            <p className={cx('num text-right font-semibold', Number(value.preco) === 0 && 'text-warn')}>
+              {Number(value.preco) === 0 ? 'Sem preço' : `${brl(value.preco)} / peça · par ${brl(value.preco * 2)} ou 10x ${brl(Math.ceil(value.preco * 2 * 10) / 100)}`}
+            </p>
+            <Button variant="ghost" size="sm" icon={X} onClick={() => { setSel(vazio); onChange(null) }}>Trocar</Button>
+          </div>
         </div>
       )}
     </div>
@@ -181,9 +270,11 @@ export default function OSForm({ os, base, onChange, lentes, armacoes, laborator
 
   // lente única replica para OE
   useEffect(() => {
-    if (os.lentes.mesma && os.lentes.OE.produto?.id !== os.lentes.OD.produto?.id) setOlhoLente('OE', { produto: os.lentes.OD.produto })
+    if (os.lentes.mesma && (os.lentes.OE.produto?.id !== os.lentes.OD.produto?.id || (os.lentes.OE.cor || '') !== (os.lentes.OD.cor || ''))) {
+      setOlhoLente('OE', { produto: os.lentes.OD.produto, cor: os.lentes.OD.cor || '' })
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [os.lentes.mesma, os.lentes.OD.produto])
+  }, [os.lentes.mesma, os.lentes.OD.produto, os.lentes.OD.cor])
 
   return (
     <div className="flex flex-col gap-6">
@@ -279,13 +370,15 @@ export default function OSForm({ os, base, onChange, lentes, armacoes, laborator
       <Section title="Lentes" aside={<Switch checked={os.lentes.mesma} onCheckedChange={(v) => setLen({ mesma: v })} label="Mesma lente nos dois olhos" />}>
         <div className="flex flex-col gap-6">
           {os.lentes.mesma ? (
-            <LenteSelector lentes={lentes} value={os.lentes.OD.produto} onChange={(p) => setOlhoLente('OD', { produto: p })} />
+            <LenteSelector lentes={lentes} value={os.lentes.OD.produto} onChange={(p) => setOlhoLente('OD', { produto: p, cor: '' })}
+              corLente={os.lentes.OD.cor} onCor={(c) => setOlhoLente('OD', { cor: c })} erroCor={erros.corOD} />
           ) : (
             <div className="grid gap-6 lg:grid-cols-2">
               {['OD', 'OE'].map((o) => (
                 <div key={o} className={cx('flex flex-col gap-3 rounded-lg p-4', o === 'OD' ? 'bg-od-soft' : 'bg-oe-soft')}>
                   <span className={cx('self-start rounded px-2 py-1 text-sm font-bold text-surface', o === 'OD' ? 'bg-od' : 'bg-oe')}>{o}</span>
-                  <LenteSelector key={`${o}-sep`} lentes={lentes} cor={o.toLowerCase()} value={os.lentes[o].produto} onChange={(p) => setOlhoLente(o, { produto: p })} />
+                  <LenteSelector key={`${o}-sep`} lentes={lentes} cor={o.toLowerCase()} value={os.lentes[o].produto} onChange={(p) => setOlhoLente(o, { produto: p, cor: '' })}
+                    corLente={os.lentes[o].cor} onCor={(c) => setOlhoLente(o, { cor: c })} erroCor={erros[`cor${o}`]} />
                 </div>
               ))}
             </div>

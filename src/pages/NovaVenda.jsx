@@ -9,6 +9,9 @@ import { validarOlho, olhoTemDados, olhoParaPayload } from '../lib/receita'
 import { Button, Field, Input, Select, Switch, Section, Spinner, Alert, Textarea, Chips, cx, useToast } from '../components/ui'
 import ClienteFicha, { fichaVazia } from '../features/venda/ClienteFicha'
 import OSForm, { novaOS } from '../features/venda/OSForm'
+import { coresDaLente } from '../lib/lentes'
+import UpsellModal, { montarPropostas, aplicarProposta } from '../features/venda/Upsell'
+import AutorizacaoDesconto from '../features/venda/AutorizacaoDesconto'
 import ClientePicker from '../features/venda/ClientePicker'
 
 const PASSOS = ['Venda e cliente', 'Ordens de serviço', 'Itens e confirmação']
@@ -97,6 +100,8 @@ function validarOS(os, tipo) {
   if (!e.receita && multi && ['OD', 'OE'].some((o) => olhoTemDados(os.receita[o]) && parseNum(os.receita[o].adicao) === null))
     e.receita = 'Lente multifocal exige adição na receita.'
   if (!os.lentes.OD.produto && !os.lentes.OE.produto) e.lentes = 'Escolha a lente.'
+  for (const o of ['OD', 'OE']) if (coresDaLente(os.lentes[o].produto).length && !os.lentes[o].cor) e[`cor${o}`] = 'Escolha a cor da lente'
+  if (!e.lentes && (e.corOD || e.corOE)) e.lentes = 'Escolha a cor da lente.'
   if (!os.armacao.propria && !os.armacao.produto) e.armacao = 'Escolha a armação ou marque “Armação do cliente”.'
   for (const o of ['OD', 'OE']) {
     // DNP e altura obrigatórias para todo olho com receita ou lente
@@ -145,6 +150,10 @@ export default function NovaVenda() {
   const [erros, setErros] = useState({})
   const [errosOS, setErrosOS] = useState({})
   const [salvando, setSalvando] = useState(false)
+  const [upsell, setUpsell] = useState({ feito: false, aberto: false, propostas: null, registro: null })
+  const [autorizacao, setAutorizacao] = useState(null) // { autorizacao_id, gerente, pct }
+  const [pedirAutorizacao, setPedirAutorizacao] = useState(false)
+  const [continuar, setContinuar] = useState(false) // segue a confirmação depois do pop-up de proposta/autorização
   const [erroSalvar, setErroSalvar] = useState(null)
 
   useEffect(() => {
@@ -212,6 +221,11 @@ export default function NovaVenda() {
     })
   }, [osList, extras, desconto, descModo, gerarOS, tipo, precos])
   const totais = itens.reduce((a, i) => ({ bruto: a.bruto + i.bruto, desc: a.desc + i.desconto, total: a.total + i.total }), { bruto: 0, desc: 0, total: 0 })
+  // limite de desconto do vendedor (null = sem limite); acima dele precisa da autorização do gerente
+  const limiteDesc = perfil.desconto_max_pct == null ? null : Number(perfil.desconto_max_pct)
+  const pctDesc = totais.bruto > 0 ? Math.round((totais.desc / totais.bruto) * 10000) / 100 : 0
+  const acimaDoLimite = limiteDesc !== null && pctDesc > limiteDesc + 0.01
+  const autorizado = acimaDoLimite && autorizacao && autorizacao.pct + 0.01 >= pctDesc
 
   const resExtras = useMemo(() => {
     const b = buscaExtra.trim().toLowerCase()
@@ -315,6 +329,12 @@ export default function NovaVenda() {
     setErroSalvar(null)
     if (!conferirTudo()) return
     if (itens.length === 0 && !(gerarOS && SEM_ITEM_OK.includes(tipo))) { setErroSalvar('Adicione pelo menos um item à venda.'); return }
+    // Técnica A ou B: antes de finalizar, uma vez por venda
+    if (!upsell.feito && tipo === 'VENDA' && gerarOS && dados) {
+      const propostas = montarPropostas(osList, dados.lentes)
+      if (propostas.A || propostas.B) { setUpsell({ feito: false, aberto: true, propostas, registro: null }); return }
+    }
+    if (acimaDoLimite && !autorizado) { setPedirAutorizacao('confirmar'); return }
     setSalvando(true); setErroSalvar(null)
     const descDe = (key) => itens.find((i) => i.key === key)?.desconto || 0
     const payload = {
@@ -323,7 +343,8 @@ export default function NovaVenda() {
       cliente_id: cliente.id,
       tipo,
       observacoes,
-      campos_extras: { meio_contato: cliente.origem, ...(tipo.startsWith('GARANTIA') ? { garantia_de: garantiaDe } : {}) },
+      campos_extras: { meio_contato: cliente.origem, ...(tipo.startsWith('GARANTIA') ? { garantia_de: garantiaDe } : {}), ...(upsell.registro ? { upsell: upsell.registro } : {}) },
+      ...(autorizado ? { autorizacao_id: autorizacao.autorizacao_id } : {}),
       confirmar: true,
       os: gerarOS ? osList.map((o) => efetiva(o, osList)).map((os) => ({
         letra: os.letra,
@@ -338,7 +359,7 @@ export default function NovaVenda() {
         receita_exame_id: os.receita_exame_id || null,
         receita: Object.fromEntries(['OD', 'OE'].filter((o) => olhoTemDados(os.receita[o])).map((o) => [o, olhoParaPayload(os.receita[o])])),
         lentes: Object.fromEntries(['OD', 'OE'].filter((o) => os.lentes[o].produto).map((o) => [o, {
-          produto_id: os.lentes[o].produto.id, dnp: nOuNull(os.lentes[o].dnp), altura: nOuNull(os.lentes[o].altura),
+          produto_id: os.lentes[o].produto.id, dnp: nOuNull(os.lentes[o].dnp), altura: nOuNull(os.lentes[o].altura), cor: os.lentes[o].cor || null,
         }])),
         armacao: {
           produto_id: os.armacao.propria ? null : os.armacao.produto?.id,
@@ -356,6 +377,12 @@ export default function NovaVenda() {
     toast(`Venda nº ${data.numero} confirmada`)
     nav(`/vendas/${data.id}`)
   }
+
+  useEffect(() => {
+    if (!continuar) return
+    setContinuar(false)
+    confirmar()
+  }, [continuar]) // eslint-disable-line react-hooks/exhaustive-deps
 
   if (erroCarga) return <div className="mx-auto max-w-3xl"><Alert>{erroCarga}</Alert></div>
   if (!dados) return <Spinner label="Carregando produtos" />
@@ -624,6 +651,10 @@ export default function NovaVenda() {
                         </dd>
                         {descModo === 'valor' && valorDe(desconto) > totais.bruto && <p className="text-xs text-warn">Desconto maior que o subtotal: limitado ao valor da venda.</p>}
                         {descModo === 'pct' && valorDe(desconto) > 100 && <p className="text-xs text-warn">Máximo de 100%.</p>}
+                        {acimaDoLimite && (autorizado
+                          ? <p className="text-xs font-semibold text-ok">Desconto de {String(pctDesc).replace('.', ',')}% autorizado por {autorizacao.gerente.split(' ')[0]}.</p>
+                          : <p className="text-xs text-warn">Desconto de {String(pctDesc).replace('.', ',')}% passa do seu limite de {String(limiteDesc).replace('.', ',')}%: o gerente autoriza com a senha dele ao confirmar.
+                              {' '}<button type="button" className="font-semibold underline" onClick={() => setPedirAutorizacao('link')}>Pedir agora</button></p>)}
                       </div>
                     )}
                     <div className="flex items-baseline justify-between border-t border-line pt-3"><dt className="font-semibold">Total</dt><dd className="num text-xl font-bold">{brl(totais.total)}</dd></div>
@@ -634,13 +665,31 @@ export default function NovaVenda() {
                   <Alert tone="ok">{TIPOS_VENDA.find((t) => t.value === tipo)?.label}: os itens entram sem cobrança e a venda não gera saldo a receber.</Alert>
                 ) : totais.total === 0 && itens.length > 0 && <Alert tone="warn">Total zerado: os produtos estão sem preço cadastrado. A venda será salva, mas não terá valor a receber.</Alert>}
                 {erroSalvar && <Alert>{erroSalvar}</Alert>}
-                <Button size="lg" onClick={confirmar} loading={salvando} icon={Check}>{gerarOS ? 'Confirmar OS' : 'Confirmar venda'}</Button>
+                <Button id="btn-confirmar" size="lg" onClick={confirmar} loading={salvando} icon={Check}>{gerarOS ? 'Confirmar OS' : 'Confirmar venda'}</Button>
                 <p className="text-xs text-muted">Ao confirmar, as OS entram na fila do laboratório e você segue para o recebimento.</p>
               </aside>
             </div>
           )}
         </motion.div>
       </AnimatePresence>
+
+      <UpsellModal aberto={upsell.aberto} propostas={upsell.propostas} total={totais.total}
+        onEscolha={(escolha) => {
+          const { A, B } = upsell.propostas || {}
+          const resumo = (p) => p && { titulo: p.titulo, acrescimo: p.delta }
+          const registro = { oferecido: true, escolha, a: resumo(A), b: resumo(B), total_antes: totais.total }
+          const escolhida = escolha === 'A' ? A : escolha === 'B' ? B : null
+          setUpsell({ feito: true, aberto: false, propostas: upsell.propostas, registro })
+          if (escolhida) {
+            setOsList((lista) => aplicarProposta(lista, escolhida))
+            toast(`Proposta ${escolha} aplicada: confira o resumo e confirme.`)
+          } else {
+            // seguiu como está: continua a confirmação
+            setContinuar(true)
+          }
+        }} />
+      <AutorizacaoDesconto aberto={!!pedirAutorizacao} pct={pctDesc} limite={limiteDesc} onFechar={() => setPedirAutorizacao(false)}
+        onAutorizado={(a) => { setAutorizacao(a); setPedirAutorizacao(false); toast(`Desconto autorizado por ${a.gerente.split(' ')[0]}`); if (pedirAutorizacao === 'confirmar') setContinuar(true) }} />
 
       <div className="flex justify-between border-t border-line pt-4">
         {passo > 0 ? <Button variant="secondary" icon={ArrowLeft} onClick={voltar}>Voltar</Button> : <span />}
