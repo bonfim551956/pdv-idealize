@@ -58,6 +58,23 @@ function ValoresLab({ venda, clienteId }) {
     </div>
   )
 }
+// Termo de autorização assinado pelo cliente na via que fica na loja
+function Termo({ venda }) {
+  const loja = `ÓTICA IDEALIZE - ${(venda.loja?.cidade || venda.loja?.nome?.replace('Óticas Idealize ', '') || '').toUpperCase()}`
+  return (
+    <div className="flex flex-col gap-[3mm] rounded-[1mm] border border-[#D2DEDF] px-[2mm] py-[1.5mm] text-[8px] leading-snug text-[#16272B]">
+      <p className="text-justify">
+        Autorizo o pedido de compra, confecção e manipulação do(s) produto(s), no preço e modelo(s) especificados. Ciente e de acordo que minha
+        desistência após a confecção do produto obriga da mesma forma o pagamento dele. Declaro estar ciente que, caso a armação seja minha, existe
+        um risco de quebra na hora do encaixe das lentes na mesma. Sendo assim, isento a {loja} de qualquer responsabilidade caso aconteça alguma eventualidade.
+      </p>
+      <div className="grid grid-cols-[1fr_2fr] gap-[8mm] pt-[3mm] text-[8px] text-[#4E6468]">
+        <p className="border-t border-[#16272B] pt-[0.5mm]">Data: ___/___/_____</p>
+        <p className="border-t border-[#16272B] pt-[0.5mm]">Assinatura do cliente</p>
+      </div>
+    </div>
+  )
+}
 const ROTULO_GARANTIA = { oculos: 'óculos', lente: 'lente', armacao: 'armação' }
 function SeloTipo({ tipo, grande, garantiaDe }) {
   const t = TIPOS[tipo] || TIPOS.VENDA
@@ -262,7 +279,8 @@ function ViaLoja({ venda, os }) {
           <SaldoLinha saldo={saldo} />
         </div>
       </div>
-      <div className="mt-auto grid grid-cols-[1fr_1fr] gap-[8mm] text-[8px] text-[#4E6468]">
+      <div className="mt-auto"><Termo venda={venda} /></div>
+      <div className="mt-[2mm] grid grid-cols-[1fr_1fr] gap-[8mm] text-[8px] text-[#4E6468]">
         <p className="border-t border-[#16272B] pt-[0.5mm]">Recebi os óculos em ___/___/_____ · assinatura do cliente</p>
         <p className="border-t border-[#16272B] pt-[0.5mm]">Entregue por</p>
       </div>
@@ -428,6 +446,7 @@ function ViaLojaVarias({ venda, ordens }) {
         </div>
       ))}
       <Pagamento venda={venda} itens={itens} parte={parte} />
+      <Termo venda={venda} />
       <div className="mt-[3mm] grid grid-cols-2 gap-[8mm] text-[8px] text-[#4E6468]">
         <p className="border-t border-[#16272B] pt-[0.5mm]">Recebi os óculos em ___/___/_____ · assinatura do cliente</p>
         <p className="border-t border-[#16272B] pt-[0.5mm]">Entregue por</p>
