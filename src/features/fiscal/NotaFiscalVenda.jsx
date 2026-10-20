@@ -31,7 +31,9 @@ export default function NotaFiscalVenda({ venda, porCliente }) {
   const [cancelar, setCancelar] = useState(null)
   const [just, setJust] = useState('')
   const [nfeDe, setNfeDe] = useState(null)
-  const poll = useRef(null)
+  const timers = useRef(new Map()) // um acompanhamento por nota
+  const vivo = useRef(true)
+  const [fones, setFones] = useState({}) // celular de cada cliente, já carregado (o WhatsApp abre na hora do clique)
 
   const carregar = useCallback(async () => {
     const { data } = await supabase.from('notas_fiscais').select('*').eq('venda_id', venda.id).order('created_at')
@@ -39,32 +41,51 @@ export default function NotaFiscalVenda({ venda, porCliente }) {
     return data || []
   }, [venda.id])
   useEffect(() => { carregar() }, [carregar])
-  useEffect(() => () => clearTimeout(poll.current), [])
+  useEffect(() => {
+    vivo.current = true
+    const t = timers.current
+    return () => { vivo.current = false; t.forEach(clearTimeout); t.clear() }
+  }, [])
+  useEffect(() => {
+    const ids = porCliente.map((c) => c.id)
+    if (!ids.length) return
+    supabase.from('cliente_contatos').select('cliente_id, valor, principal').in('cliente_id', ids).then(({ data }) => {
+      const m = {}
+      for (const c of data || []) if (!m[c.cliente_id] || c.principal) m[c.cliente_id] = c.valor
+      setFones(m)
+    })
+  }, [porCliente.map((c) => c.id).join()]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const mensagemFalha = (n) => n?.status === 'denegado'
+    ? `Nota denegada pela SEFAZ: ${n.mensagem || 'confira o cadastro do cliente e da loja.'}`
+    : `Nota não autorizada: ${n?.mensagem || 'veja o detalhe na lista.'}`
 
   // NF-e é processada em fila: consulta de 4 em 4 segundos até sair o resultado (máx. ~1 min)
   const acompanhar = useCallback((nota, tentativa = 0) => {
-    clearTimeout(poll.current)
-    if (tentativa >= 15) return
-    poll.current = setTimeout(async () => {
+    clearTimeout(timers.current.get(nota.id))
+    if (tentativa >= 15 || !vivo.current) return
+    timers.current.set(nota.id, setTimeout(async () => {
+      if (!vivo.current) return
       try {
         const r = await nfce({ acao: 'consultar', nota_id: nota.id })
+        if (!vivo.current) return
         await carregar()
         const st = r?.nota?.status
         if (PROCESSANDO.includes(st)) acompanhar(nota, tentativa + 1)
         else if (st === 'autorizado') toast(`${NOME_MODELO[nota.modelo]} autorizada`)
-        else if (st === 'erro_autorizacao') setErro(`Nota não autorizada: ${r.nota.mensagem || 'veja o detalhe na lista.'}`)
-      } catch { acompanhar(nota, tentativa + 1) }
-    }, 4000)
-  }, [carregar, toast])
+        else setErro(mensagemFalha(r?.nota))
+      } catch { if (vivo.current) acompanhar(nota, tentativa + 1) }
+    }, 4000))
+  }, [carregar, toast]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const rodar = async (chave, body, ok) => {
     setOcupado(chave); setErro(null)
     try {
       const r = await nfce(body)
       const n = r?.nota
-      if (n?.status === 'erro_autorizacao') setErro(`Nota não autorizada: ${n.mensagem || 'veja o detalhe na lista.'}`)
-      else if (n && PROCESSANDO.includes(n.status)) { toast('Nota enviada; aguardando a SEFAZ…'); acompanhar(n) }
-      else if (ok) toast(ok)
+      if (n && PROCESSANDO.includes(n.status)) { toast('Nota enviada; aguardando a SEFAZ…'); acompanhar(n) }
+      else if (n?.status === 'autorizado' || n?.status === 'cancelado') { if (ok) toast(ok) }
+      else setErro(n ? mensagemFalha(n) : 'Não foi possível registrar a resposta da nota. Clique em Atualizar.')
       await carregar()
       return r
     } catch (e) {
@@ -78,10 +99,9 @@ export default function NotaFiscalVenda({ venda, porCliente }) {
   }
 
   // Abre o WhatsApp do cliente com o link da nota
-  const enviarWhats = async (n) => {
+  const enviarWhats = (n) => {
     const cli = porCliente.find((c) => c.id === n.cliente_id)
-    const { data: ct } = await supabase.from('cliente_contatos').select('valor, principal').eq('cliente_id', n.cliente_id).order('principal', { ascending: false }).limit(1).maybeSingle()
-    let fone = so(ct?.valor)
+    let fone = so(fones[n.cliente_id])
     if (fone.length === 10 || fone.length === 11) fone = `55${fone}`
     const primeiro = (cli?.nome || '').split(' ')[0]
     const nomeCap = primeiro ? primeiro[0] + primeiro.slice(1).toLowerCase() : ''
@@ -122,7 +142,7 @@ export default function NotaFiscalVenda({ venda, porCliente }) {
                         onClick={() => rodar(`e-${c.id}`, { acao: 'emitir', modelo: 'nfce', venda_id: venda.id, cliente_id: c.id }, 'Cupom fiscal autorizado')}>
                         Cupom (NFC-e)
                       </Button>
-                      <Button size="sm" variant="secondary" icon={FileText} disabled={!!ocupado} onClick={() => setNfeDe(c)}>NF-e</Button>
+                      <Button size="sm" variant="secondary" icon={FileText} disabled={!!ocupado} onClick={() => { setErro(null); setNfeDe(c) }}>NF-e</Button>
                     </div>
                   )}
                 </li>
@@ -178,14 +198,15 @@ export default function NotaFiscalVenda({ venda, porCliente }) {
         )}
       </div>
 
-      <NFeModal cliente={nfeDe} onClose={() => setNfeDe(null)} enviando={!!ocupado}
+      <NFeModal cliente={nfeDe} onClose={() => { setNfeDe(null); setErro(null) }} enviando={!!ocupado} erro={erro}
         onEmitir={async (destinatario) => {
           const r = await rodar(`n-${nfeDe.id}`, { acao: 'emitir', modelo: 'nfe', venda_id: venda.id, cliente_id: nfeDe.id, destinatario }, 'NF-e autorizada')
           if (r?.nota && r.nota.status !== 'erro_autorizacao') setNfeDe(null)
         }} />
 
-      <Modal open={!!cancelar} onOpenChange={(v) => { if (!v) { setCancelar(null); setJust('') } }} title="Cancelar nota fiscal?">
+      <Modal open={!!cancelar} onOpenChange={(v) => { if (!v) { setCancelar(null); setJust(''); setErro(null) } }} title="Cancelar nota fiscal?">
         <div className="flex flex-col gap-4">
+          {erro && <Alert>{erro}</Alert>}
           <p className="text-sm">{cancelar?.modelo === 'nfe'
             ? 'A NF-e pode ser cancelada em até 24 horas depois da autorização, se a mercadoria ainda não saiu.'
             : 'A SEFAZ só aceita cancelamento de NFC-e em até 30 minutos depois da autorização.'} Depois disso, fale com o contador.</p>
@@ -206,7 +227,7 @@ export default function NotaFiscalVenda({ venda, porCliente }) {
 /* ---------- NF-e: escolher destinatário ---------- */
 const vazio = { documento: '', nome: '', indicador_ie: '9', ie: '', cep: '', logradouro: '', numero: '', complemento: '', bairro: '', cidade: '', uf: 'SP' }
 
-function NFeModal({ cliente, onClose, onEmitir, enviando }) {
+function NFeModal({ cliente, onClose, onEmitir, enviando, erro }) {
   const [modo, setModo] = useState('cliente')
   const [end, setEnd] = useState(null)
   const [d, setD] = useState(vazio)
@@ -261,6 +282,7 @@ function NFeModal({ cliente, onClose, onEmitir, enviando }) {
     <Modal open={!!cliente} onOpenChange={(v) => !v && onClose()} title="Emitir NF-e" wide>
       {cliente && (
         <div className="flex flex-col gap-4">
+          {erro && <Alert>{erro}</Alert>}
           <div className="flex flex-col gap-2 sm:flex-row">
             {opcao('cliente', 'No CPF do cliente', `${cliente.nome}${cpfCliente ? ` · ${docFmt(cliente.documento)}` : ''}`)}
             {opcao('outro', 'Em outro CPF ou CNPJ', 'Ex.: nota no CNPJ da empresa do cliente')}

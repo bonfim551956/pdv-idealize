@@ -115,6 +115,13 @@ Deno.serve(async (req) => {
     return resp({ configurado: true, nome: c.nome, nome_social: c.nome_social, nascimento: c.nascimento, situacao: c.situacao, confere: String(c.fonte || '').includes('serpro'), fonte: c.fonte, cache: true })
   }
 
+  // limite de consultas pagas por pessoa (evita uso indevido e custo inesperado) e registro de quem consultou
+  const umaHora = new Date(Date.now() - 3600_000).toISOString()
+  const { count: feitas } = await admin.from('registro_acoes').select('id', { count: 'exact', head: true })
+    .eq('tipo', 'consulta_cpf').eq('colaborador_id', eu.id).gte('criado_em', umaHora)
+  if ((feitas || 0) >= 40) return resp({ configurado: true, erro: 'Limite de consultas de CPF por hora atingido. Preencha manualmente.' })
+  await admin.from('registro_acoes').insert({ tipo: 'consulta_cpf', colaborador_id: eu.id, detalhe: `***${cpf.slice(-4)}${nasc ? ' +nasc' : ''}` })
+
   try {
     let nome: string | null = null
     let fonte = ''

@@ -1,7 +1,18 @@
 const brlFmt = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' })
 export const brl = (n) => brlFmt.format(Number(n || 0))
 
-// Aceita "−2,25", "-2.25", "+1,5", "2" → número
+// Valor em reais digitado no balcão: "1.250,00", "1250,5", "1.250" (milhar) e "12.5" (ponto decimal)
+export function parseValor(v) {
+  if (v === null || v === undefined) return null
+  let s = String(v).trim().replace(/\s|R\$/g, '')
+  if (s === '') return null
+  if (s.includes(',')) s = s.replace(/\./g, '').replace(',', '.')
+  else if (/^\d{1,3}(\.\d{3})+$/.test(s)) s = s.replace(/\./g, '')
+  const n = Number(s)
+  return Number.isFinite(n) ? n : NaN
+}
+
+// Aceita "−2,25", "-2.25", "+1,5", "2" → número (graus, medidas)
 export function parseNum(v) {
   if (v === null || v === undefined) return null
   const s = String(v).trim().replace('−', '-').replace(',', '.')
@@ -22,7 +33,9 @@ export const dataBR = (d) => (d ? new Date(d).toLocaleDateString('pt-BR') : '')
 export const dataHoraBR = (d) =>
   d ? new Date(d).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' }) : ''
 
-export const hojeISO = () => new Date().toISOString().slice(0, 10)
+// Data de hoje no fuso da loja (não em UTC: depois das 21h o UTC já é o dia seguinte)
+export const isoLocal = (d = new Date()) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+export const hojeISO = () => isoLocal()
 export function somaDias(dias, base = new Date()) {
   const d = new Date(base)
   d.setDate(d.getDate() + dias)
@@ -33,10 +46,13 @@ export function paraDatetimeLocal(d) {
   const p = (x) => String(x).padStart(2, '0')
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`
 }
+// Soma meses mantendo o dia; se o mês não tiver esse dia (31/01 + 1 mês), usa o último dia do mês
 export function somaMesesISO(iso, meses) {
-  const d = new Date(iso + 'T12:00:00')
-  d.setMonth(d.getMonth() + meses)
-  return d.toISOString().slice(0, 10)
+  const [a, m, dia] = iso.split('-').map(Number)
+  const alvo = new Date(a, m - 1 + meses, 1)
+  const ultimo = new Date(alvo.getFullYear(), alvo.getMonth() + 1, 0).getDate()
+  alvo.setDate(Math.min(dia, ultimo))
+  return isoLocal(alvo)
 }
 
 // Divide um valor em N parcelas em centavos; a última absorve o arredondamento

@@ -3,7 +3,7 @@ import * as Tabs from '@radix-ui/react-tabs'
 import { Plus, Search, X } from 'lucide-react'
 import { ORDEM_TRAT, ROTULO_TRAT, ORDEM_CAT, ROTULO_CAT, GRUPOS, ROTULO_GRUPO, grupoDe, buscarLentes } from '../lib/lentes'
 import { supabase, mensagemErro, buscarTodos } from '../lib/supabase'
-import { brl, parseNum } from '../lib/format'
+import { brl, parseValor } from '../lib/format'
 import { Button, Field, Input, Select, Chips, Section, Spinner, Alert, Modal, Switch, cx, useToast } from '../components/ui'
 
 const TIPOS = { armacao: 'Armação', solar: 'Óculos solar', acessorio: 'Acessório', servico: 'Serviço', tratamento: 'Tratamento', lente_contato: 'Lente de contato' }
@@ -16,7 +16,7 @@ function PrecoCell({ produto, campo, onSalvo }) {
   useEffect(() => setV(brlInput(produto[campo])), [produto, campo])
 
   const salvar = async () => {
-    const n = parseNum(v) ?? 0
+    const n = parseValor(v) ?? 0
     if (Number.isNaN(n) || n < 0) { setEstado('erro'); return }
     if (n === Number(produto[campo] || 0)) return
     setEstado('salvando')
@@ -42,11 +42,11 @@ function NovoProdutoModal({ open, onOpenChange, onCriado }) {
   const salvar = async (e) => {
     e.preventDefault()
     if (!f.sku.trim() || !f.nome.trim()) { setErro('Informe SKU e nome.'); return }
-    const preco = parseNum(f.preco) ?? 0
+    const preco = parseValor(f.preco) ?? 0
     setSalvando(true); setErro(null)
     const { data, error } = await supabase.from('produtos').insert({
       sku: f.sku.trim().toUpperCase(), nome: f.nome.trim().toUpperCase(), tipo: f.tipo, marca: f.marca || null,
-      preco, custo: parseNum(f.custo), ativo: true,
+      preco, custo: parseValor(f.custo), ativo: true,
     }).select('*').single()
     setSalvando(false)
     if (error) { setErro(mensagemErro(error)); return }
@@ -122,7 +122,7 @@ export default function Produtos() {
   }, [produtos, busca])
 
   const aplicarEmMassa = async () => {
-    const n = parseNum(massa)
+    const n = parseValor(massa)
     if (n === null || Number.isNaN(n) || n < 0) { toast('Informe um preço válido.', 'erro'); return }
     setAplicando(true)
     const ids = filtradas.map((f) => f.id)

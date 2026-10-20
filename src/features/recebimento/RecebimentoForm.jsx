@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { supabase, mensagemErro } from '../../lib/supabase'
-import { brl, parseNum, hojeISO, somaMesesISO, dividirParcelas } from '../../lib/format'
+import { brl, parseValor, hojeISO, somaMesesISO, dividirParcelas } from '../../lib/format'
 import { Button, Field, Input, Select, Alert, Chips, useToast } from '../../components/ui'
 
 export const FORMAS = {
@@ -38,7 +38,7 @@ export default function RecebimentoForm({ venda, saldo, caixas, forma, onCancela
   const [erro, setErro] = useState(null)
   const [salvando, setSalvando] = useState(false)
 
-  const v = parseNum(valor)
+  const v = parseValor(valor)
   const valorOk = v !== null && !Number.isNaN(v) && v > 0 && v <= saldo + 0.001
 
   // Gera parcelas de carnê / boleto / cheque sempre que valor, quantidade ou 1º vencimento mudam

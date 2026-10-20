@@ -31,11 +31,18 @@ Deno.serve(async (req) => {
   if (!usuario || !senha) return resp({ erro: 'Informe usuário e senha do gerente.' })
   if (!(pct > 0 && pct <= 100)) return resp({ erro: 'Percentual de desconto inválido.' })
 
+  // trava de tentativas: 5 senhas erradas em 15 minutos bloqueiam novas tentativas desse vendedor
+  const desde = new Date(Date.now() - 15 * 60_000).toISOString()
+  const { count: falhas } = await admin.from('registro_acoes').select('id', { count: 'exact', head: true })
+    .eq('tipo', 'autorizar_desconto').eq('colaborador_id', vendedor.id).eq('ok', false).gte('criado_em', desde)
+  if ((falhas || 0) >= 5) return resp({ erro: 'Muitas tentativas com senha errada. Aguarde 15 minutos ou chame outro gerente.' })
+  const registrar = (ok: boolean, detalhe: string) => admin.from('registro_acoes').insert({ tipo: 'autorizar_desconto', colaborador_id: vendedor.id, ok, detalhe })
+
   // confere a senha do gerente num cliente separado (não mexe na sessão de ninguém)
   const auth = createClient(url, Deno.env.get('SUPABASE_ANON_KEY')!, { auth: { persistSession: false, autoRefreshToken: false } })
   const { data: login, error } = await auth.auth.signInWithPassword({ email: `${usuario}@pdv.idealize`, password: senha })
-  if (error || !login?.user) return resp({ erro: 'Usuário ou senha do gerente incorretos.' })
-  await auth.auth.signOut().catch(() => {})
+  if (error || !login?.user) { await registrar(false, `usuario ${usuario} · ${pct}%`); return resp({ erro: 'Usuário ou senha do gerente incorretos.' }) }
+  // não chama signOut: sem escopo ele encerraria as sessões do gerente em todos os aparelhos (o cliente aqui não guarda sessão)
 
   const { data: g } = await admin.from('colaboradores').select('id, nome, cargo, ativo, desconto_max_pct').eq('auth_user_id', login.user.id).maybeSingle()
   if (!g?.ativo || !AUTORIZA.includes(g.cargo)) return resp({ erro: 'Este usuário não pode autorizar desconto. Chame o gerente, a supervisão ou a diretoria.' })
@@ -45,5 +52,6 @@ Deno.serve(async (req) => {
 
   const { data: a, error: e2 } = await admin.from('autorizacoes_desconto').insert({ gerente_id: g.id, vendedor_id: vendedor.id, pct }).select('id').single()
   if (e2) return resp({ erro: 'Não foi possível registrar a autorização. Tente de novo.' }, 500)
+  await registrar(true, `gerente ${g.nome} · ${pct}%`)
   return resp({ autorizacao_id: a.id, gerente: g.nome, pct })
 })

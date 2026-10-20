@@ -62,7 +62,7 @@ const ClienteFicha = forwardRef(function ClienteFicha({ empresaId, onClienteSalv
     const ct = data.contatos?.find((x) => x.principal) || data.contatos?.[0]
     const en = data.enderecos?.[0]
     const ficha = {
-      id: data.id, nome: data.nome, documento: mascaraCPF(data.documento || ''), celular: mascaraFone(ct?.valor || ''),
+      id: data.id, docOriginal: data.documento || '', nome: data.nome, documento: mascaraCPF(data.documento || ''), celular: mascaraFone(ct?.valor || ''),
       nascimento: data.data_nascimento || '', origem: data.origem || '', contatoId: ct?.id || null,
       cep: mascaraCEP(en?.cep || ''), logradouro: en?.logradouro || '', numero: en?.numero || '', complemento: en?.complemento || '',
       bairro: en?.bairro || '', cidade: en?.cidade || '', uf: en?.uf || 'SP', enderecoId: en?.id || null,
@@ -73,9 +73,9 @@ const ClienteFicha = forwardRef(function ClienteFicha({ empresaId, onClienteSalv
   const limpar = () => { setF({ ...vazio }); setErros({}); setErro(null); setAvisoCpf(null) }
 
   // CPF completo e válido: se já é cliente da Idealize, preenche a ficha inteira (sem custo)
-  const reconhecerCpf = async (cpfMascarado) => {
+  const reconhecerCpf = async (cpfMascarado, ficaNovo = false) => {
     const doc = soDigitos(cpfMascarado)
-    if (doc.length !== 11 || !cpfValido(doc) || f.id) return
+    if (doc.length !== 11 || !cpfValido(doc) || (f.id && !ficaNovo)) return
     setBuscandoCpf(true)
     const { data } = await supabase.from('clientes').select('id, nome, documento').eq('documento', doc).limit(1).maybeSingle()
     setBuscandoCpf(false)
@@ -86,7 +86,7 @@ const ClienteFicha = forwardRef(function ClienteFicha({ empresaId, onClienteSalv
       return
     }
     setAvisoCpf(null)
-    consultarReceita(doc, dataCompleta(f.nascimento) ? f.nascimento : null)
+    consultarReceita(doc, !ficaNovo && dataCompleta(f.nascimento) ? f.nascimento : null, ficaNovo)
   }
 
   // Cliente novo:
@@ -94,9 +94,9 @@ const ClienteFicha = forwardRef(function ClienteFicha({ empresaId, onClienteSalv
   // - a Receita (Serpro Consulta CPF v3) confirma o par CPF + nascimento e o nome oficial.
   // Cada consulta é cobrada, então o mesmo CPF + data não é consultado duas vezes.
   const ultimaConsulta = useRef('')
-  const consultarReceita = async (cpfDig, nasc) => {
+  const consultarReceita = async (cpfDig, nasc, ficaNovo = false) => {
     const chave = `${cpfDig}|${nasc || ''}`
-    if (f.id || !cpfValido(cpfDig) || ultimaConsulta.current === chave) return
+    if ((f.id && !ficaNovo) || !cpfValido(cpfDig) || ultimaConsulta.current === chave) return
     setBuscandoCpf(true)
     const { data: rf } = await supabase.functions.invoke('consultar-cpf', { body: { cpf: cpfDig, ...(nasc ? { nascimento: nasc } : {}) } }).catch(() => ({ data: null }))
     setBuscandoCpf(false)
@@ -250,8 +250,16 @@ const ClienteFicha = forwardRef(function ClienteFicha({ empresaId, onClienteSalv
               <Input id={id} invalid={invalid} inputMode="numeric" placeholder="000.000.000-00" className="num pr-9" value={f.documento}
                 onChange={(e) => {
                   const doc = mascaraCPF(e.target.value)
+                  const dig = soDigitos(doc)
+                  // CPF diferente do cliente carregado: é outra pessoa. Limpa a ficha para não sobrescrever o cadastro de quem estava carregado.
+                  if (f.id && f.docOriginal && dig.length === 11 && dig !== soDigitos(f.docOriginal)) {
+                    setF({ ...vazio, documento: doc }); setErros({})
+                    setAvisoCpf({ tom: 'warn', txt: 'CPF diferente do cliente que estava carregado: a ficha foi limpa para este outro CPF.' })
+                    reconhecerCpf(doc, true)
+                    return
+                  }
                   setF((x) => ({ ...x, documento: doc }))
-                  if (soDigitos(doc).length === 11 && soDigitos(doc) !== soDigitos(f.documento)) reconhecerCpf(doc)
+                  if (dig.length === 11 && dig !== soDigitos(f.documento)) reconhecerCpf(doc)
                 }} />
               {buscandoCpf && <Loader2 className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-muted" aria-hidden />}
             </div>

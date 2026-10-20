@@ -237,7 +237,7 @@ function parteDoCliente(venda, clienteId) {
   const pagamentos = ativos.filter((r) => (r.pagador_id || principal) === clienteId)
   const pago = pagamentos.reduce((t, r) => t + Number(r.valor), 0)
   // se a venda já está quitada (alguém pagou por todos), ninguém fica com saldo
-  const saldo = saldoVenda <= 0.004 ? 0 : Math.max(0, total - pago)
+  const saldo = saldoVenda <= 0.004 ? 0 : Math.min(Math.max(0, total - pago), saldoVenda)
   return { total, desconto, pagamentos, saldo, itens }
 }
 

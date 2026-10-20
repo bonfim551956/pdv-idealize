@@ -4,7 +4,7 @@ import { AnimatePresence, m } from 'framer-motion'
 import { Check, Plus, Trash2, ArrowLeft, Search, UserPlus, Link2 } from 'lucide-react'
 import { supabase, mensagemErro } from '../lib/supabase'
 import { useAuth } from '../lib/auth'
-import { brl, parseNum } from '../lib/format'
+import { brl, parseNum, parseValor } from '../lib/format'
 import { validarOlho, olhoTemDados, olhoParaPayload } from '../lib/receita'
 import { Button, Field, Input, Select, Switch, Section, Spinner, Alert, Textarea, Chips, cx, useToast } from '../components/ui'
 import ClienteFicha, { fichaVazia } from '../features/venda/ClienteFicha'
@@ -118,7 +118,7 @@ function validarOS(os, tipo) {
 }
 
 const nOuNull = (v) => { const n = parseNum(v); return n === null || Number.isNaN(n) ? null : n }
-const valorDe = (v) => Math.max(0, nOuNull(v) ?? 0)
+const valorDe = (v) => { const n = parseValor(v); return n === null || Number.isNaN(n) ? 0 : Math.max(0, n) }
 const soValor = (v) => v.replace(/[^\d,.]/g, '')
 
 export default function NovaVenda() {
@@ -154,6 +154,8 @@ export default function NovaVenda() {
   const [upsell, setUpsell] = useState({ feito: false, aberto: false, propostas: null, registro: null })
   const [autorizacao, setAutorizacao] = useState(null) // { autorizacao_id, gerente, pct }
   const [pedirAutorizacao, setPedirAutorizacao] = useState(false)
+  // identifica esta venda: se a confirmação for enviada duas vezes (internet caiu), o banco devolve a mesma venda
+  const chaveVenda = useRef(typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`)
   const [continuar, setContinuar] = useState(false) // segue a confirmação depois do pop-up de proposta/autorização
   const [erroSalvar, setErroSalvar] = useState(null)
 
@@ -346,6 +348,7 @@ export default function NovaVenda() {
       observacoes,
       campos_extras: { meio_contato: cliente.origem, ...(tipo.startsWith('GARANTIA') ? { garantia_de: garantiaDe } : {}), ...(upsell.registro ? { upsell: upsell.registro } : {}) },
       ...(autorizado ? { autorizacao_id: autorizacao.autorizacao_id } : {}),
+      chave: chaveVenda.current,
       confirmar: true,
       os: gerarOS ? osList.map((o) => efetiva(o, osList)).map((os) => ({
         letra: os.letra,
@@ -675,6 +678,8 @@ export default function NovaVenda() {
       </AnimatePresence>
 
       <UpsellModal aberto={upsell.aberto} propostas={upsell.propostas} total={totais.total}
+        fatorDesconto={descModo === 'pct' ? 1 - Math.min(valorDe(desconto), 100) / 100 : 1}
+        onFechar={() => setUpsell((u) => ({ ...u, aberto: false }))}
         onEscolha={(escolha) => {
           const { A, B } = upsell.propostas || {}
           const resumo = (p) => p && { titulo: p.titulo, acrescimo: p.delta }

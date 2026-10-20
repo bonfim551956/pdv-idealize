@@ -83,9 +83,11 @@ export function aplicarProposta(osList, proposta) {
 
 const parcela = (v) => brl(Math.ceil((v / 10) * 100) / 100)
 
-function Cartao({ letra, p, total, onEscolher }) {
+function Cartao({ letra, p, total, fator = 1, onEscolher }) {
   if (!p) return null
-  const novoTotal = total + p.delta
+  // desconto em % da venda também vale sobre o acréscimo
+  const acrescimo = Math.round(p.delta * fator * 100) / 100
+  const novoTotal = total + acrescimo
   return (
     <button type="button" onClick={onEscolher}
       className="group flex flex-1 flex-col gap-3 rounded-lg border-2 border-line p-4 text-left transition-colors hover:border-brand hover:bg-brand-soft">
@@ -95,7 +97,7 @@ function Cartao({ letra, p, total, onEscolher }) {
       </span>
       <span className="text-sm text-muted">{p.texto}.</span>
       <span className="flex flex-col gap-0.5">
-        <span className="num text-sm text-muted">+ {brl(p.delta)} no total</span>
+        <span className="num text-sm text-muted">+ {brl(acrescimo)} no total</span>
         <span className="num text-lg font-bold text-ink">{brl(novoTotal)}</span>
         <span className="num text-sm font-semibold text-brand">10x de {parcela(novoTotal)} sem juros</span>
       </span>
@@ -104,18 +106,18 @@ function Cartao({ letra, p, total, onEscolher }) {
   )
 }
 
-export default function UpsellModal({ aberto, propostas, total, onEscolha }) {
+export default function UpsellModal({ aberto, propostas, total, fatorDesconto = 1, onEscolha, onFechar }) {
   const { A, B } = propostas || {}
   return (
-    <Modal open={aberto} onOpenChange={(v) => !v && onEscolha('nenhuma')} title="Antes de finalizar: proposta A ou B" wide>
+    <Modal open={aberto} onOpenChange={(v) => !v && onFechar()} title="Antes de finalizar: proposta A ou B" wide>
       <div className="flex flex-col gap-4">
         <div className="flex items-start gap-3 rounded-md bg-accent-soft p-3 text-sm text-accent-dark">
           <Sparkles className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
           <p><b>"Posso te fazer uma proposta?"</b> Hoje o óculos fica em <b className="num">{brl(total)}</b> ({`10x de ${parcela(total)}`}). Apresente as duas opções e deixe o cliente escolher.</p>
         </div>
         <div className={cx('flex flex-col gap-3', A && B && 'sm:flex-row')}>
-          <Cartao letra="A" p={A} total={total} onEscolher={() => onEscolha('A')} />
-          <Cartao letra="B" p={B} total={total} onEscolher={() => onEscolha('B')} />
+          <Cartao letra="A" p={A} total={total} fator={fatorDesconto} onEscolher={() => onEscolha('A')} />
+          <Cartao letra="B" p={B} total={total} fator={fatorDesconto} onEscolher={() => onEscolha('B')} />
         </div>
         <div className="flex justify-end">
           <Button variant="ghost" onClick={() => onEscolha('nenhuma')}>Cliente preferiu seguir como está</Button>

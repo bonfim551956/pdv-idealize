@@ -197,7 +197,15 @@ Deno.serve(async (req) => {
         venda_id: v.id, loja_id: v.loja_id, cliente_id: clienteId, ref, modelo, ambiente: cfg.amb, status: 'processando', valor: totalNota, emitida_por: eu.id, destinatario,
       }).select('id').single()
       if (en) return erro(en.message, 500)
-      const r = await fetch(`${cfg.base}/${modelo}?ref=${encodeURIComponent(ref)}`, { method: 'POST', headers: { Authorization: cfg.auth, 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
+      let r: Response
+      try {
+        r = await fetch(`${cfg.base}/${modelo}?ref=${encodeURIComponent(ref)}`, { method: 'POST', headers: { Authorization: cfg.auth, 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
+      } catch {
+        // sem resposta: não dá para saber se a Focus recebeu. Fica "processando" e o "Atualizar" resolve
+        // (se a Focus não conhecer a referência, a consulta marca como não autorizada e libera nova emissão)
+        const { data: n } = await db.from('notas_fiscais').update({ mensagem: 'Sem resposta da Focus NFe. Clique em Atualizar em alguns segundos.' }).eq('id', nota.id).select('*').single()
+        return resp({ nota: n })
+      }
       const j = await r.json().catch(() => ({ status: 'erro_autorizacao', mensagem: `Focus NFe respondeu ${r.status}` }))
       if (!r.ok && !j.status) j.status = 'erro_autorizacao'
       return resp({ nota: await salvarResposta(nota.id, cfg.amb, j) })
@@ -213,6 +221,10 @@ Deno.serve(async (req) => {
       if (b.acao === 'consultar') {
         const r = await fetch(`${base}/${encodeURIComponent(n.ref)}?completa=0`, { headers: { Authorization: cfg.auth } })
         const j = await r.json().catch(() => ({}))
+        // a Focus não conhece a referência: a emissão nunca chegou lá. Marca como não autorizada para liberar nova emissão
+        if (r.status === 404 && ['processando', 'processando_autorizacao'].includes(n.status)) {
+          return resp({ nota: await salvarResposta(n.id, n.ambiente, { status: 'erro_autorizacao', mensagem: 'A nota não chegou à Focus NFe. Pode emitir de novo.' }) })
+        }
         if (!r.ok || !j.status) return erro(j.mensagem || `Focus NFe não respondeu agora (${r.status}). Tente de novo.`, 502)
         return resp({ nota: await salvarResposta(n.id, n.ambiente, j) })
       }
