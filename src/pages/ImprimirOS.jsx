@@ -40,6 +40,24 @@ function SaldoLinha({ saldo }) {
     </p>
   )
 }
+// Valor da compra e saldo também na via do laboratório (mesmos números da via da loja)
+function ValoresLab({ venda, clienteId }) {
+  const parte = parteDoCliente(venda, clienteId)
+  const deve = parte.saldo > 0.004
+  return (
+    <div className="flex shrink-0 items-stretch gap-[2mm] text-[10px]">
+      <div className="rounded-[1mm] border border-[#D2DEDF] px-[1.5mm] py-[0.5mm]">
+        <p className="text-[8px] font-bold uppercase tracking-wide text-[#4E6468]">Valor da compra</p>
+        <p className="num font-bold">{brl(parte.total)}</p>
+      </div>
+      <div className={cx('rounded-[1mm] px-[1.5mm] py-[0.5mm]', deve ? 'bg-[#B42318] text-[#FAFAFA]' : 'bg-[#E4F2EA] text-[#1E7A46]')}
+        style={{ printColorAdjust: 'exact', WebkitPrintColorAdjust: 'exact' }}>
+        <p className="text-[8px] font-bold uppercase tracking-wide">Saldo na retirada</p>
+        <p className="num font-bold">{deve ? brl(parte.saldo) : 'Quitado'}</p>
+      </div>
+    </div>
+  )
+}
 const ROTULO_GARANTIA = { oculos: 'óculos', lente: 'lente', armacao: 'armação' }
 function SeloTipo({ tipo, grande, garantiaDe }) {
   const t = TIPOS[tipo] || TIPOS.VENDA
@@ -264,11 +282,12 @@ function ViaLaboratorio({ venda, os }) {
       </div>
       <TabelaReceita os={os} prisma />
       <LenteArmacao os={os} />
-      <div>
-        <div className="min-w-0">
+      <div className="flex items-start gap-[4mm]">
+        <div className="min-w-0 flex-1">
           <Rotulo>Observações</Rotulo>
           <p className="line-clamp-2 whitespace-pre-wrap text-[10px] leading-snug">{os.observacoes || '—'}</p>
         </div>
+        <ValoresLab venda={venda} clienteId={os.paciente_id} />
       </div>
       <div className="mt-auto grid grid-cols-3 gap-[6mm] text-[8px] text-[#4E6468]">
         {['Surfaçagem', 'Montagem', 'Conferência final'].map((t) => (
@@ -305,6 +324,11 @@ function ViaClienteBase({ venda, clienteId, numeroOS, detalhe, retirada, altura 
           {l.endereco && <p>{l.endereco}</p>}
           {l.whatsapp && <p className="mt-[0.5mm] text-[10px] font-bold text-[#16272B]">WhatsApp {l.whatsapp}</p>}
           {l.telefone && <p>Tel. {l.telefone}</p>}
+          {l.horario_funcionamento && (
+            <div className="mt-[0.5mm] text-[8px] leading-snug">
+              {l.horario_funcionamento.split(' · ').map((h) => <p key={h}>{h}</p>)}
+            </div>
+          )}
         </div>
       </div>
       <div className="grid flex-1 grid-cols-3 content-center gap-x-[4mm] gap-y-[2mm] py-[2.5mm]">
@@ -424,6 +448,7 @@ function ViaLabVarias({ venda, ordens }) {
         <Dado rotulo="Laboratório">{labs.join(' · ') || 'Não informado'}</Dado>
         <Dado rotulo="Entregar na loja até" forte>{dataBR(prazo)}</Dado>
       </div>
+      <div className="flex justify-end"><ValoresLab venda={venda} clienteId={new Set(ordens.map((o) => o.paciente_id)).size === 1 ? ordens[0].paciente_id : null} /></div>
       {ordens.map((os) => (
         <div key={os.id} className="flex flex-col gap-[1mm] rounded-[1.5mm] border border-[#D2DEDF] p-[1.5mm]">
           <p className="flex flex-wrap gap-x-3 text-[10px]">
@@ -521,7 +546,7 @@ export default function ImprimirOS() {
       id, numero, tipo, data_venda, observacoes, campos_extras, total_bruto, total_desconto, total_liquido,
       cliente:clientes(id, nome, documento, contatos:cliente_contatos(tipo, valor, principal)),
       vendedor:colaboradores!vendas_vendedor_id_fkey(nome),
-      loja:lojas(nome, cidade, endereco, telefone, whatsapp, cnpj, razao_social),
+      loja:lojas(nome, cidade, endereco, telefone, whatsapp, cnpj, razao_social, horario_funcionamento),
       itens:itens_venda(descricao, sku, olho, quantidade, preco_unitario, desconto, total, os_id),
       ordens:ordens_servico(id, numero, letra, oculos, data_receita, previsao_entrega, iniciais, observacoes, aviso_entrega,
         paciente_id, paciente:clientes(id, nome, documento, contatos:cliente_contatos(valor, principal)), laboratorio:laboratorios(nome),
