@@ -58,6 +58,16 @@ function ValoresLab({ venda, clienteId }) {
     </div>
   )
 }
+// Observações da OS e da venda na via da loja
+function ObsLoja({ textos }) {
+  const t = [...new Set(textos.map((x) => (x || '').trim()).filter(Boolean))]
+  return (
+    <div className="min-w-0 text-[10px]">
+      <Rotulo>Observações</Rotulo>
+      <p className="line-clamp-2 whitespace-pre-wrap leading-snug">{t.length ? t.join(' · ') : '—'}</p>
+    </div>
+  )
+}
 // Termo de autorização assinado pelo cliente na via que fica na loja
 function Termo({ venda }) {
   const loja = `ÓTICA IDEALIZE - ${(venda.loja?.cidade || venda.loja?.nome?.replace('Óticas Idealize ', '') || '').toUpperCase()}`
@@ -255,6 +265,7 @@ function ViaLoja({ venda, os }) {
       </div>
       <TabelaReceita os={os} />
       <LenteArmacao os={os} />
+      <ObsLoja textos={[os.observacoes, venda.observacoes]} />
       <div className="grid grid-cols-[1.5fr_1fr] gap-[4mm] text-[10px]">
         <div>
           <Rotulo>Produtos</Rotulo>
@@ -443,8 +454,10 @@ function ViaLojaVarias({ venda, ordens }) {
           </p>
           <TabelaReceita os={os} />
           <LenteArmacao os={os} />
+          {os.observacoes && <p className="line-clamp-1 text-[9px]"><b>Obs.:</b> {os.observacoes}</p>}
         </div>
       ))}
+      {venda.observacoes && <p className="line-clamp-2 text-[9px]"><b>Obs. da venda:</b> {venda.observacoes}</p>}
       <Pagamento venda={venda} itens={itens} parte={parte} />
       <Termo venda={venda} />
       <div className="mt-[3mm] grid grid-cols-2 gap-[8mm] text-[8px] text-[#4E6468]">
