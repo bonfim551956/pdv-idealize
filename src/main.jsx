@@ -1,7 +1,7 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
 import { BrowserRouter } from 'react-router-dom'
-import { MotionConfig } from 'framer-motion'
+import { MotionConfig, LazyMotion, domAnimation } from 'framer-motion'
 import App from './App'
 import { AuthProvider } from './lib/auth'
 import { CONFIG_FALTANDO } from './lib/supabase'
@@ -40,6 +40,7 @@ if (!url || !key || !/^https:\/\//.test(url)) {
       {CONFIG_FALTANDO ? (
         <ConfigFaltando />
       ) : (
+        <LazyMotion features={domAnimation} strict>
         <MotionConfig reducedMotion="user">
           <BrowserRouter>
             <ToastProvider>
@@ -49,6 +50,7 @@ if (!url || !key || !/^https:\/\//.test(url)) {
             </ToastProvider>
           </BrowserRouter>
         </MotionConfig>
+        </LazyMotion>
       )}
     </ErrorBoundary>
   </React.StrictMode>

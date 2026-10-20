@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { AnimatePresence, motion } from 'framer-motion'
+import { AnimatePresence, m } from 'framer-motion'
 import { Check, Plus, Trash2, ArrowLeft, Search, UserPlus, Link2 } from 'lucide-react'
-import { supabase, mensagemErro, buscarTodos } from '../lib/supabase'
+import { supabase, mensagemErro } from '../lib/supabase'
 import { useAuth } from '../lib/auth'
 import { brl, parseNum } from '../lib/format'
 import { validarOlho, olhoTemDados, olhoParaPayload } from '../lib/receita'
@@ -10,6 +10,7 @@ import { Button, Field, Input, Select, Switch, Section, Spinner, Alert, Textarea
 import ClienteFicha, { fichaVazia } from '../features/venda/ClienteFicha'
 import OSForm, { novaOS } from '../features/venda/OSForm'
 import { coresDaLente } from '../lib/lentes'
+import { carregarCatalogo } from '../lib/catalogo'
 import UpsellModal, { montarPropostas, aplicarProposta } from '../features/venda/Upsell'
 import AutorizacaoDesconto from '../features/venda/AutorizacaoDesconto'
 import ClientePicker from '../features/venda/ClientePicker'
@@ -160,7 +161,7 @@ export default function NovaVenda() {
     ;(async () => {
       const [lojas, prods, labs] = await Promise.all([
         supabase.from('lojas').select('id, nome, empresa_id').eq('id', perfil.loja_id),
-        buscarTodos(() => supabase.from('produtos').select('id, sku, nome, tipo, preco, atributos').eq('ativo', true).order('nome').order('id')),
+        carregarCatalogo(),
         supabase.from('laboratorios').select('id, nome').eq('ativo', true).order('nome'),
       ])
       const err = lojas.error || prods.error || labs.error
@@ -417,7 +418,7 @@ export default function NovaVenda() {
       {erroSalvar && passo !== 2 && <Alert>{erroSalvar}</Alert>}
 
       <AnimatePresence mode="wait">
-        <motion.div key={passo} initial={{ opacity: 0, x: 16 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -16 }} transition={{ duration: 0.18 }}>
+        <m.div key={passo} initial={{ opacity: 0, x: 16 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -16 }} transition={{ duration: 0.18 }}>
           {passo === 0 && (
             <div className="flex flex-col gap-6">
               <Section title="Venda">
@@ -670,7 +671,7 @@ export default function NovaVenda() {
               </aside>
             </div>
           )}
-        </motion.div>
+        </m.div>
       </AnimatePresence>
 
       <UpsellModal aberto={upsell.aberto} propostas={upsell.propostas} total={totais.total}

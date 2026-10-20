@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useId, useState, forwardRef } from 'react'
 import * as Dialog from '@radix-ui/react-dialog'
 import * as SwitchPrim from '@radix-ui/react-switch'
-import { AnimatePresence, motion } from 'framer-motion'
+import { AnimatePresence, m } from 'framer-motion'
 import { Loader2, X, CheckCircle2, AlertTriangle } from 'lucide-react'
 
 export const cx = (...c) => c.filter(Boolean).join(' ')
@@ -198,7 +198,7 @@ export function ToastProvider({ children }) {
       <div className="pointer-events-none fixed bottom-4 right-4 z-[60] flex w-[calc(100%-32px)] max-w-sm flex-col gap-2" aria-live="polite">
         <AnimatePresence>
           {itens.map((t) => (
-            <motion.div
+            <m.div
               key={t.id}
               initial={{ opacity: 0, y: 12 }}
               animate={{ opacity: 1, y: 0 }}
@@ -210,7 +210,7 @@ export function ToastProvider({ children }) {
             >
               {t.tone === 'ok' ? <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" /> : <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />}
               {t.texto}
-            </motion.div>
+            </m.div>
           ))}
         </AnimatePresence>
       </div>

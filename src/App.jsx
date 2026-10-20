@@ -1,16 +1,25 @@
+import { lazy, Suspense } from 'react'
 import { Navigate, Route, Routes } from 'react-router-dom'
 import { useAuth } from './lib/auth'
 import Layout from './components/Layout'
 import Login from './pages/Login'
 import Vendas from './pages/Vendas'
-import NovaVenda from './pages/NovaVenda'
-import VendaDetalhe from './pages/VendaDetalhe'
-import Produtos from './pages/Produtos'
-import ImprimirOS from './pages/ImprimirOS'
-import Relatorios from './pages/Relatorios'
-import Fechamento from './pages/Fechamento'
-import NotaFiscal from './pages/NotaFiscal'
-import Usuarios from './pages/Usuarios'
+// Depois de uma atualização publicada, os arquivos antigos das telas deixam de existir:
+// se uma tela não carregar, recarrega a página uma vez para pegar a versão nova.
+const carregar = (f) => lazy(() => f().then((m) => { try { sessionStorage.removeItem('pdv-recarregou') } catch { /* ok */ } return m }).catch((e) => {
+  let ja = false
+  try { ja = sessionStorage.getItem('pdv-recarregou') === '1'; sessionStorage.setItem('pdv-recarregou', '1') } catch { /* ok */ }
+  if (!ja) { window.location.reload(); return new Promise(() => {}) }
+  throw e
+}))
+const NovaVenda = carregar(() => import('./pages/NovaVenda'))
+const VendaDetalhe = carregar(() => import('./pages/VendaDetalhe'))
+const Produtos = carregar(() => import('./pages/Produtos'))
+const ImprimirOS = carregar(() => import('./pages/ImprimirOS'))
+const Relatorios = carregar(() => import('./pages/Relatorios'))
+const Fechamento = carregar(() => import('./pages/Fechamento'))
+const NotaFiscal = carregar(() => import('./pages/NotaFiscal'))
+const Usuarios = carregar(() => import('./pages/Usuarios'))
 import { Spinner, Alert, Button } from './components/ui'
 
 export default function App() {
@@ -29,13 +38,17 @@ export default function App() {
     )
   }
 
+  // Telas carregadas sob demanda: o login e a lista de vendas abrem sem baixar relatórios, impressão etc.
+  const carregandoTela = <div className="grid min-h-[40vh] place-items-center"><Spinner /></div>
   return (
+    <Suspense fallback={carregandoTela}>
     <Routes>
       <Route path="/vendas/:id/imprimir" element={<ImprimirOS />} />
       <Route
         path="*"
         element={
           <Layout>
+            <Suspense fallback={carregandoTela}>
             <Routes>
               <Route path="/" element={<Vendas />} />
               <Route path="/nova-venda" element={<NovaVenda />} />
@@ -47,9 +60,11 @@ export default function App() {
               <Route path="/usuarios" element={perm.usuarios ? <Usuarios /> : <Navigate to="/" />} />
               <Route path="*" element={<Navigate to="/" />} />
             </Routes>
+            </Suspense>
           </Layout>
         }
       />
     </Routes>
+    </Suspense>
   )
 }

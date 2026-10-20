@@ -30,12 +30,20 @@ export function mensagemErro(e) {
 }
 
 // Busca todas as linhas de uma consulta, em páginas de 1000 (limite da API do Supabase)
-export async function buscarTodos(montar, passo = 1000) {
+export async function buscarTodos(montar, passo = 1000, paralelas = 4) {
+  // Busca as páginas em lotes paralelos (o PostgREST devolve no máximo 1000 linhas por pedido).
+  // Antes eram pedidos em sequência; em paralelo o catálogo de lentes chega de uma vez.
   let todos = []
-  for (let de = 0; ; de += passo) {
-    const { data, error } = await montar().range(de, de + passo - 1)
-    if (error) return { data: null, error }
-    todos = todos.concat(data || [])
-    if (!data || data.length < passo) return { data: todos, error: null }
+  for (let lote = 0; ; lote += paralelas) {
+    const pedidos = Array.from({ length: paralelas }, (_, i) => {
+      const de = (lote + i) * passo
+      return montar().range(de, de + passo - 1)
+    })
+    const res = await Promise.all(pedidos)
+    for (const { data, error } of res) {
+      if (error) return { data: null, error }
+      todos = todos.concat(data || [])
+      if (!data || data.length < passo) return { data: todos, error: null }
+    }
   }
 }
