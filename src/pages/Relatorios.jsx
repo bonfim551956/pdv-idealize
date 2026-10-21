@@ -55,7 +55,7 @@ function Colunas({ dias }) {
 
 export default function Relatorios() {
   const { isAdmin, perfil } = useAuth()
-  // Notas fiscais emitidas: todos os perfis (Comercial e Administrativo veem a própria loja)
+  // Notas fiscais emitidas: todos os perfis (Comercial, Administrativo e Gerente veem a própria loja)
   const visoes = [...VISOES, { value: 'notas', label: 'Notas fiscais' }]
   const [periodo, setPeriodo] = useState('mes')
   const [de, setDe] = useState(isoLocal(new Date(new Date().getFullYear(), new Date().getMonth(), 1)))

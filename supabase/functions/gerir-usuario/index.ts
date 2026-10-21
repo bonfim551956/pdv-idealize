@@ -2,9 +2,9 @@ import 'jsr:@supabase/functions-js/edge-runtime.d.ts'
 import { createClient } from 'jsr:@supabase/supabase-js@2'
 
 // Gestão de usuários do PDV. Só aqui a chave de serviço é usada; a hierarquia de perfis é aplicada antes de qualquer alteração.
-// Administrativo é gerente da própria loja: só cria e gere usuários (Comercial) da loja dele.
+// Administrativo e Gerente são da própria loja: só criam e gerem usuários de nível abaixo do seu, na loja deles.
 const DOMINIO = 'pdv.idealize'
-const NIVEL: Record<string, number> = { comercial: 1, administrativo: 2, supervisao: 3, diretor: 4 }
+const NIVEL: Record<string, number> = { comercial: 1, administrativo: 2, gerente: 3, supervisao: 4, diretor: 5 }
 const cors = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
@@ -15,7 +15,7 @@ const resp = (body: unknown, status = 200) =>
 const erro = (mensagem: string, status = 400) => resp({ erro: mensagem }, status)
 
 // Quem pode atribuir/gerir qual perfil: abaixo do próprio nível; diretor gere todos
-const podeGerir = (meu: number, alvo: number) => (meu === 4 ? true : alvo < meu)
+const podeGerir = (meu: number, alvo: number) => (meu === 5 ? true : alvo < meu)
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors })
@@ -34,7 +34,7 @@ Deno.serve(async (req) => {
   if (!eu2 || !eu2.ativo) return erro('Seu usuário não está ativo.', 403)
   const meuNivel = NIVEL[eu2.cargo] ?? 0
   if (meuNivel < 2) return erro('Seu perfil não pode gerenciar usuários.', 403)
-  const soMinhaLoja = meuNivel < 3
+  const soMinhaLoja = meuNivel < 4 // administrativo e gerente: só a própria loja
   const lojaPermitida = (lojaId: string | null | undefined) => !soMinhaLoja || lojaId === eu2.loja_id
 
   let body: Record<string, any>

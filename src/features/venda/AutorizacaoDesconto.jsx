@@ -5,7 +5,7 @@ import { Modal, Field, Input, Button, Alert, cx } from '../../components/ui'
 
 /*
   Desconto acima do limite do consultor. Duas formas, as duas pelo cadastro do gerente
-  (Administrativo da própria loja, Supervisão ou Diretor):
+  (Gerente da própria loja, até o limite dele; Supervisão ou Diretor):
   1. Senha aqui: o gerente digita o usuário e a senha dele nesta tela (a senha vai direto ao servidor e não fica guardada).
   2. Pelo usuário do gerente: o pedido aparece na tela do gerente, que aprova ou recusa de onde estiver.
 */

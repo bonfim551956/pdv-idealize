@@ -9,6 +9,7 @@ const nomeLoja = (n) => (n || '').replace('Óticas Idealize ', '')
 const COR_PERFIL = {
   comercial: 'bg-brand-soft text-brand',
   administrativo: 'bg-accent-soft text-accent-dark',
+  gerente: 'bg-accent text-ink',
   supervisao: 'bg-ok-soft text-ok',
   diretor: 'bg-ink text-surface',
 }
@@ -165,7 +166,7 @@ export default function Usuarios() {
       supabase.from('lojas').select('id, nome').eq('ativo', true).order('nome'),
     ])
     if (c.error || l.error) { setErro(mensagemErro(c.error || l.error)); setLista([]); return }
-    // administrativo: só a própria loja
+    // administrativo e gerente: só a própria loja
     const minhaLoja = (x) => perm.todasLojas || x === perfil.loja_id
     setLista(c.data.filter((x) => minhaLoja(x.loja_id))); setLojas(l.data.filter((x) => minhaLoja(x.id)))
   }, [perm.todasLojas, perfil.loja_id])
@@ -249,7 +250,7 @@ export default function Usuarios() {
                     <td className="px-4 py-3"><PerfilBadge cargo={u.cargo} /></td>
                     <td className="px-4 py-3">{nomeLoja(u.loja?.nome)}</td>
                     <td className="px-4 py-3">
-                      {perm.nivel >= 3 ? (
+                      {perm.nivel >= 4 ? (
                         <button type="button" onClick={() => setModal({ tipo: 'desconto', usuario: u })} className="num underline decoration-dotted underline-offset-4 hover:text-brand">
                           {u.desconto_max_pct == null ? 'Sem limite' : `${String(Number(u.desconto_max_pct)).replace('.', ',')}%`}
                         </button>

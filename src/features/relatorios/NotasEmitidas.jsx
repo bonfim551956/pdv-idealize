@@ -9,7 +9,7 @@ import { Kpi, nomeLoja } from './partes'
 
 /*
   Relatório de notas fiscais emitidas no período (NFC-e = cupom fiscal e NF-e), para conferência e impressão.
-  Administrativo vê a própria loja; Supervisão e Diretor, todas (o banco garante).
+  Comercial, Administrativo e Gerente veem a própria loja; Supervisão e Diretor, todas (o banco garante).
   Por padrão só notas de produção: as de homologação (teste) não têm valor fiscal.
 */
 const MODELOS = [

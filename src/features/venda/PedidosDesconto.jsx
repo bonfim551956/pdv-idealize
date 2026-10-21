@@ -6,7 +6,7 @@ import { useAuth } from '../../lib/auth'
 import { Button, useToast } from '../../components/ui'
 
 /*
-  Pedidos de desconto acima do limite, na tela do gerente (Administrativo da loja, Supervisão ou Diretor).
+  Pedidos de desconto acima do limite, na tela do gerente (Gerente da loja, Supervisão ou Diretor).
   Aparece em qualquer página do PDV; o gerente aprova ou recusa pelo próprio usuário.
   O banco confere loja e limite do gerente (pdv.responder_desconto).
 */

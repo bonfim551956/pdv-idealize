@@ -1,8 +1,9 @@
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts'
 import { createClient } from 'jsr:@supabase/supabase-js@2'
 
-// Autorização de desconto acima do limite do vendedor: o gerente (Administrativo, Supervisão ou Diretor)
-// digita usuário e senha no balcão. A senha é conferida aqui e nunca é guardada.
+// Autorização de desconto acima do limite do vendedor: o Gerente da loja (até o limite dele), Supervisão ou Diretor.
+// Administrativo não autoriza desconto.
+// Ele digita usuário e senha no balcão. A senha é conferida aqui e nunca é guardada.
 // Devolve uma autorização de uso único (30 min) que o criar_venda consome.
 const cors = {
   'Access-Control-Allow-Origin': '*',
@@ -10,7 +11,7 @@ const cors = {
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 }
 const resp = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { ...cors, 'Content-Type': 'application/json' } })
-const AUTORIZA = ['administrativo', 'supervisao', 'diretor']
+const AUTORIZA = ['gerente', 'supervisao', 'diretor']
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors })
@@ -46,8 +47,8 @@ Deno.serve(async (req) => {
 
   const { data: g } = await admin.from('colaboradores').select('id, nome, cargo, ativo, loja_id, desconto_max_pct').eq('auth_user_id', login.user.id).maybeSingle()
   if (!g?.ativo || !AUTORIZA.includes(g.cargo)) return resp({ erro: 'Este usuário não pode autorizar desconto. Chame o gerente, a supervisão ou a diretoria.' })
-  // administrativo é gerente da própria loja: só autoriza venda da loja dele
-  if (g.cargo === 'administrativo' && g.loja_id !== vendedor.loja_id) return resp({ erro: `${g.nome.split(' ')[0]} é gerente de outra loja. Chame o gerente desta loja, a supervisão ou a diretoria.` })
+  // gerente é da própria loja: só autoriza venda da loja dele
+  if (g.cargo === 'gerente' && g.loja_id !== vendedor.loja_id) return resp({ erro: `${g.nome.split(' ')[0]} é gerente de outra loja. Chame o gerente desta loja, a supervisão ou a diretoria.` })
   if (g.desconto_max_pct != null && pct > Number(g.desconto_max_pct) + 0.01) {
     return resp({ erro: `${g.nome.split(' ')[0]} pode autorizar até ${String(g.desconto_max_pct).replace('.', ',')}%. Chame a supervisão ou a diretoria.` })
   }
