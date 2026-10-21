@@ -250,7 +250,7 @@ export default function Usuarios() {
                     <td className="px-4 py-3"><PerfilBadge cargo={u.cargo} /></td>
                     <td className="px-4 py-3">{nomeLoja(u.loja?.nome)}</td>
                     <td className="px-4 py-3">
-                      {perm.nivel >= 4 ? (
+                      {(perm.nivel >= 5 || (perm.nivel === 4 && !['supervisao', 'diretor'].includes(u.cargo))) ? (
                         <button type="button" onClick={() => setModal({ tipo: 'desconto', usuario: u })} className="num underline decoration-dotted underline-offset-4 hover:text-brand">
                           {u.desconto_max_pct == null ? 'Sem limite' : `${String(Number(u.desconto_max_pct)).replace('.', ',')}%`}
                         </button>
@@ -322,6 +322,8 @@ export default function Usuarios() {
 
 // Limite de desconto que a pessoa dá sem autorização (e até quanto ela autoriza, se for gerente)
 function FormDesconto({ usuario, onSalvo, onCancelar }) {
+  const { perm } = useAuth()
+  const diretor = perm.nivel >= 5 // supervisão define até 40%; sem limite e acima de 40% só a diretoria
   const toast = useToast()
   const [semLimite, setSemLimite] = useState(usuario.desconto_max_pct == null)
   const [pct, setPct] = useState(usuario.desconto_max_pct == null ? '15' : String(Number(usuario.desconto_max_pct)).replace('.', ','))
@@ -331,6 +333,7 @@ function FormDesconto({ usuario, onSalvo, onCancelar }) {
     e.preventDefault()
     const v = semLimite ? null : Number(String(pct).replace(',', '.'))
     if (!semLimite && !(v >= 0 && v <= 100)) { setErro('Informe um percentual entre 0 e 100.'); return }
+    if (!diretor && (semLimite || v > 40)) { setErro('Supervisão define limites de até 40%. Acima disso, só a diretoria.'); return }
     setSalvando(true); setErro(null)
     const { error } = await supabase.rpc('definir_desconto_max', { p_colab: usuario.id, p_pct: v })
     setSalvando(false)
@@ -339,9 +342,9 @@ function FormDesconto({ usuario, onSalvo, onCancelar }) {
   }
   return (
     <form onSubmit={salvar} className="flex flex-col gap-4" noValidate>
-      <p className="text-sm text-muted">Até esse percentual a pessoa dá desconto sozinha. Acima disso, o gerente autoriza com a senha dele. Para gerente, é também até quanto ele pode autorizar.</p>
+      <p className="text-sm text-muted">Até esse percentual a pessoa dá desconto sozinha. Acima disso, quem autoriza é o gerente (até 25%), a supervisão (até 40%) ou a diretoria. Para gerente e supervisão, é também até quanto eles podem autorizar.</p>
       {erro && <Alert>{erro}</Alert>}
-      <Switch checked={semLimite} onCheckedChange={setSemLimite} label="Sem limite" />
+      {diretor && <Switch checked={semLimite} onCheckedChange={setSemLimite} label="Sem limite" />}
       {!semLimite && (
         <Field label="Desconto máximo (%)" required>
           {({ id }) => <Input id={id} inputMode="decimal" className="num w-32" value={pct} onChange={(e) => setPct(e.target.value.replace(/[^\d,.]/g, ''))} autoFocus />}

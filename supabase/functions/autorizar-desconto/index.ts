@@ -50,7 +50,7 @@ Deno.serve(async (req) => {
   // gerente é da própria loja: só autoriza venda da loja dele
   if (g.cargo === 'gerente' && g.loja_id !== vendedor.loja_id) return resp({ erro: `${g.nome.split(' ')[0]} é gerente de outra loja. Chame o gerente desta loja, a supervisão ou a diretoria.` })
   if (g.desconto_max_pct != null && pct > Number(g.desconto_max_pct) + 0.01) {
-    return resp({ erro: `${g.nome.split(' ')[0]} pode autorizar até ${String(g.desconto_max_pct).replace('.', ',')}%. Chame a supervisão ou a diretoria.` })
+    return resp({ erro: `${g.nome.split(' ')[0]} pode autorizar até ${String(g.desconto_max_pct).replace('.', ',')}%. ${g.cargo === 'gerente' ? 'Chame a supervisão ou a diretoria' : 'Acima disso, só a diretoria autoriza'}.` })
   }
 
   const { data: a, error: e2 } = await admin.from('autorizacoes_desconto').insert({ gerente_id: g.id, vendedor_id: vendedor.id, pct }).select('id').single()

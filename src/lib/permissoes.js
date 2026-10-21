@@ -3,8 +3,8 @@ export const PERFIS = {
   comercial: { nivel: 1, nome: 'Comercial', descricao: 'Lança vendas, recebe pagamentos e vê vendas e relatórios da própria loja. Desconto até 15% (acima disso, o gerente autoriza).' },
   administrativo: { nivel: 2, nome: 'Administrativo', descricao: 'Vendas, relatórios e usuários Comercial da própria loja. Não dá nem autoriza desconto.' },
   gerente: { nivel: 3, nome: 'Gerente', descricao: 'Gerente da loja: tudo do Administrativo, cadastra Comercial e Administrativo e autoriza desconto até 25%.' },
-  supervisao: { nivel: 4, nome: 'Supervisão', descricao: 'Todas as lojas, incluindo lentes e preços. Cria usuários até Gerente e define limites de desconto.' },
-  diretor: { nivel: 5, nome: 'Diretor / Proprietário', descricao: 'Acesso total, incluindo o cadastro fiscal. Cria e gerencia usuários de todos os perfis.' },
+  supervisao: { nivel: 4, nome: 'Supervisão', descricao: 'Todas as lojas, incluindo lentes e preços. Cria usuários até Gerente. Desconto e autorização até 40%.' },
+  diretor: { nivel: 5, nome: 'Diretor / Proprietário', descricao: 'Acesso total, incluindo o cadastro fiscal. Cria e gerencia usuários de todos os perfis. Único que autoriza desconto acima de 40%.' },
 }
 
 export function permissoes(cargo) {
