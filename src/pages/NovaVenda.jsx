@@ -334,8 +334,9 @@ export default function NovaVenda() {
     if (itens.length === 0 && !(gerarOS && SEM_ITEM_OK.includes(tipo))) { setErroSalvar('Adicione pelo menos um item à venda.'); return }
     // Técnica A ou B: antes de finalizar, uma vez por venda
     if (!upsell.feito && tipo === 'VENDA' && gerarOS && dados) {
-      const propostas = montarPropostas(osList, dados.lentes)
-      if (propostas.A || propostas.B) { setUpsell({ feito: false, aberto: true, propostas, registro: null }); return }
+      // obrigatório: sempre que a venda tiver lente, o consultor passa pela tela de A ou B
+      const temLente = osList.some((os) => os.lentes.OD.produto || os.lentes.OE.produto)
+      if (temLente) { setUpsell({ feito: false, aberto: true, propostas: montarPropostas(osList, dados.lentes), registro: null }); return }
     }
     if (acimaDoLimite && !autorizado) { setPedirAutorizacao('confirmar'); return }
     setSalvando(true); setErroSalvar(null)
@@ -679,7 +680,6 @@ export default function NovaVenda() {
 
       <UpsellModal aberto={upsell.aberto} propostas={upsell.propostas} total={totais.total}
         fatorDesconto={descModo === 'pct' ? 1 - Math.min(valorDe(desconto), 100) / 100 : 1}
-        onFechar={() => setUpsell((u) => ({ ...u, aberto: false }))}
         onEscolha={(escolha) => {
           const { A, B } = upsell.propostas || {}
           const resumo = (p) => p && { titulo: p.titulo, acrescimo: p.delta }
@@ -694,7 +694,7 @@ export default function NovaVenda() {
             setContinuar(true)
           }
         }} />
-      <AutorizacaoDesconto aberto={!!pedirAutorizacao} pct={pctDesc} limite={limiteDesc} onFechar={() => setPedirAutorizacao(false)}
+      <AutorizacaoDesconto aberto={!!pedirAutorizacao} pct={pctDesc} limite={limiteDesc} total={totais.total} cliente={cliente?.nome} onFechar={() => setPedirAutorizacao(false)}
         onAutorizado={(a) => { setAutorizacao(a); setPedirAutorizacao(false); toast(`Desconto autorizado por ${a.gerente.split(' ')[0]}`); if (pedirAutorizacao === 'confirmar') setContinuar(true) }} />
 
       <div className="flex justify-between border-t border-line pt-4">

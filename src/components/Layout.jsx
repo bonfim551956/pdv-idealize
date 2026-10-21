@@ -3,6 +3,7 @@ import { ReceiptText, PlusCircle, Glasses, LogOut, Store, BarChart3, Users, Wall
 import { PERFIS } from '../lib/permissoes'
 import { useAuth } from '../lib/auth'
 import { cx } from './ui'
+import PedidosDesconto from '../features/venda/PedidosDesconto'
 
 export function Logo({ branca, className }) {
   return <img src={branca ? '/logo-branca.png' : '/logo.png'} alt="Óticas Idealize" className={cx('h-auto select-none', className)} draggable={false} />
@@ -73,6 +74,9 @@ export default function Layout({ children }) {
       </header>
 
       <main className="min-w-0 px-4 pb-24 pt-6 sm:px-8 md:pb-12">{children}</main>
+
+      {/* gerente: pedidos de desconto acima do limite chegam aqui, em qualquer página */}
+      {perm.nivel >= 2 && <PedidosDesconto />}
 
       <nav className="fixed inset-x-0 bottom-0 z-30 flex border-t border-line bg-surface md:hidden" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
         {links.map((l) => (

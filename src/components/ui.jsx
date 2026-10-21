@@ -155,12 +155,16 @@ export function Alert({ tone = 'danger', children }) {
 }
 
 /* ---------- Modal ---------- */
-export function Modal({ open, onOpenChange, title, children, wide }) {
+// travado: sem X, Esc ou clique fora (a pessoa precisa escolher uma das opções da tela)
+export function Modal({ open, onOpenChange, title, children, wide, travado }) {
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 z-40 bg-ink/40" />
         <Dialog.Content
+          onEscapeKeyDown={travado ? (e) => e.preventDefault() : undefined}
+          onPointerDownOutside={travado ? (e) => e.preventDefault() : undefined}
+          onInteractOutside={travado ? (e) => e.preventDefault() : undefined}
           className={cx(
             'fixed inset-x-0 bottom-0 z-50 max-h-[92vh] overflow-y-auto rounded-t-lg bg-surface p-6 shadow-xl',
             'sm:inset-auto sm:left-1/2 sm:top-1/2 sm:w-full sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-lg',
@@ -169,9 +173,11 @@ export function Modal({ open, onOpenChange, title, children, wide }) {
         >
           <div className="mb-6 flex items-start justify-between gap-4">
             <Dialog.Title className="text-lg font-semibold">{title}</Dialog.Title>
-            <Dialog.Close className="rounded-md p-1 text-muted hover:text-ink" aria-label="Fechar">
-              <X className="h-5 w-5" />
-            </Dialog.Close>
+            {!travado && (
+              <Dialog.Close className="rounded-md p-1 text-muted hover:text-ink" aria-label="Fechar">
+                <X className="h-5 w-5" />
+              </Dialog.Close>
+            )}
           </div>
           <Dialog.Description className="sr-only">{title}</Dialog.Description>
           {children}
