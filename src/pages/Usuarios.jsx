@@ -165,8 +165,10 @@ export default function Usuarios() {
       supabase.from('lojas').select('id, nome').eq('ativo', true).order('nome'),
     ])
     if (c.error || l.error) { setErro(mensagemErro(c.error || l.error)); setLista([]); return }
-    setLista(c.data); setLojas(l.data)
-  }, [])
+    // administrativo: só a própria loja
+    const minhaLoja = (x) => perm.todasLojas || x === perfil.loja_id
+    setLista(c.data.filter((x) => minhaLoja(x.loja_id))); setLojas(l.data.filter((x) => minhaLoja(x.id)))
+  }, [perm.todasLojas, perfil.loja_id])
   useEffect(() => { carregar() }, [carregar])
 
   const filtrada = useMemo(() => {
@@ -207,10 +209,10 @@ export default function Usuarios() {
           <Input aria-label="Buscar usuário" className="pl-9" placeholder="Buscar por nome ou usuário" value={busca} onChange={(e) => setBusca(e.target.value)} />
         </div>
         <div className="flex flex-wrap items-center gap-4">
-          <Select aria-label="Loja" className="w-56" value={filtroLoja} onChange={(e) => setFiltroLoja(e.target.value)}>
+          {perm.todasLojas && <Select aria-label="Loja" className="w-56" value={filtroLoja} onChange={(e) => setFiltroLoja(e.target.value)}>
             <option value="">Todas as lojas</option>
             {lojas.map((l) => <option key={l.id} value={l.id}>{nomeLoja(l.nome)}</option>)}
-          </Select>
+          </Select>}
           <Chips label="Situação" value={filtroStatus} onChange={(v) => v && setFiltroStatus(v)}
             options={[{ value: 'ativos', label: 'Ativos' }, { value: 'inativos', label: 'Desativados' }, { value: 'todos', label: 'Todos' }]} />
         </div>

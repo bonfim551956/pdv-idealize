@@ -35,7 +35,7 @@ Deno.serve(async (req) => {
   if (!u?.user) return erro('Sessão expirada. Entre novamente.', 401)
   const { data: eu } = await db.from('colaboradores').select('id, cargo, ativo, loja_id').eq('auth_user_id', u.user.id).maybeSingle()
   if (!eu?.ativo) return erro('Usuário sem acesso.', 403)
-  const todasLojas = ['administrativo', 'supervisao', 'diretor'].includes(eu.cargo)
+  const todasLojas = ['supervisao', 'diretor'].includes(eu.cargo) // administrativo é da própria loja
   const podeLoja = (lojaId: string) => todasLojas || eu.loja_id === lojaId
 
   let b: Record<string, any> = {}

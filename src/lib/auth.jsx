@@ -41,7 +41,7 @@ export function AuthProvider({ children }) {
   }
   const sair = () => supabase.auth.signOut()
   const perm = permissoes(perfil?.cargo)
-  const isAdmin = perm.todasLojas // vê todas as lojas (administrativo para cima)
+  const isAdmin = perm.todasLojas // vê todas as lojas (supervisão e diretor)
 
   return (
     <AuthCtx.Provider value={{ session, perfil, perm, isAdmin, carregando, erroPerfil, entrar, sair }}>

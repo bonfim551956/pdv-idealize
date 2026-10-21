@@ -20,7 +20,7 @@ Deno.serve(async (req) => {
   const tk = (req.headers.get('Authorization') || '').replace('Bearer ', '')
   const { data: u } = await admin.auth.getUser(tk)
   if (!u?.user) return resp({ erro: 'Sessão expirada. Entre novamente.' }, 401)
-  const { data: vendedor } = await admin.from('colaboradores').select('id, ativo').eq('auth_user_id', u.user.id).maybeSingle()
+  const { data: vendedor } = await admin.from('colaboradores').select('id, ativo, loja_id').eq('auth_user_id', u.user.id).maybeSingle()
   if (!vendedor?.ativo) return resp({ erro: 'Usuário sem acesso.' }, 403)
 
   let b: Record<string, unknown> = {}
@@ -44,8 +44,10 @@ Deno.serve(async (req) => {
   if (error || !login?.user) { await registrar(false, `usuario ${usuario} · ${pct}%`); return resp({ erro: 'Usuário ou senha do gerente incorretos.' }) }
   // não chama signOut: sem escopo ele encerraria as sessões do gerente em todos os aparelhos (o cliente aqui não guarda sessão)
 
-  const { data: g } = await admin.from('colaboradores').select('id, nome, cargo, ativo, desconto_max_pct').eq('auth_user_id', login.user.id).maybeSingle()
+  const { data: g } = await admin.from('colaboradores').select('id, nome, cargo, ativo, loja_id, desconto_max_pct').eq('auth_user_id', login.user.id).maybeSingle()
   if (!g?.ativo || !AUTORIZA.includes(g.cargo)) return resp({ erro: 'Este usuário não pode autorizar desconto. Chame o gerente, a supervisão ou a diretoria.' })
+  // administrativo é gerente da própria loja: só autoriza venda da loja dele
+  if (g.cargo === 'administrativo' && g.loja_id !== vendedor.loja_id) return resp({ erro: `${g.nome.split(' ')[0]} é gerente de outra loja. Chame o gerente desta loja, a supervisão ou a diretoria.` })
   if (g.desconto_max_pct != null && pct > Number(g.desconto_max_pct) + 0.01) {
     return resp({ erro: `${g.nome.split(' ')[0]} pode autorizar até ${String(g.desconto_max_pct).replace('.', ',')}%. Chame a supervisão ou a diretoria.` })
   }
