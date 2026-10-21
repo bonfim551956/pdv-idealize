@@ -8,6 +8,7 @@ import { Chips, Field, Input, Select, Section, Spinner, Alert, Empty, cx } from 
 import { FORMAS } from '../features/recebimento/RecebimentoForm'
 import { Kpi, Barras, pct, nomeLoja } from '../features/relatorios/partes'
 import RelatoriosExtra, { VISOES } from '../features/relatorios/RelatoriosExtra'
+import NotasEmitidas from '../features/relatorios/NotasEmitidas'
 
 const PERIODOS = [
   { value: 'hoje', label: 'Hoje' },
@@ -53,7 +54,9 @@ function Colunas({ dias }) {
 }
 
 export default function Relatorios() {
-  const { isAdmin, perfil } = useAuth()
+  const { isAdmin, perfil, perm } = useAuth()
+  // Notas fiscais emitidas: Administrativo (loja dele), Supervisão e Diretor
+  const visoes = perm.nivel >= 2 ? [...VISOES, { value: 'notas', label: 'Notas fiscais' }] : VISOES
   const [periodo, setPeriodo] = useState('mes')
   const [de, setDe] = useState(isoLocal(new Date(new Date().getFullYear(), new Date().getMonth(), 1)))
   const [ate, setAte] = useState(isoLocal(new Date()))
@@ -85,15 +88,15 @@ export default function Relatorios() {
 
   return (
     <div className="mx-auto flex max-w-6xl flex-col gap-6">
-      <div className="flex flex-wrap items-end justify-between gap-4">
+      <div className="no-print flex flex-wrap items-end justify-between gap-4">
         <div>
           <h1 className="text-xl font-bold">Relatórios</h1>
-          <p className="mt-1 text-sm text-muted">{isAdmin ? (loja ? nomeLoja(lojas.find((l) => l.id === loja)?.nome) : 'Todas as lojas') : perfil.loja?.nome} · {visao === 'detalhado' ? 'todos os registros' : 'vendas confirmadas'}</p>
+          <p className="mt-1 text-sm text-muted">{isAdmin ? (loja ? nomeLoja(lojas.find((l) => l.id === loja)?.nome) : 'Todas as lojas') : perfil.loja?.nome} · {visao === 'detalhado' ? 'todos os registros' : visao === 'notas' ? 'notas fiscais emitidas' : 'vendas confirmadas'}</p>
         </div>
       </div>
 
-      <div className="flex flex-col gap-4 rounded-lg border border-line bg-surface p-4">
-        <Chips label="Relatório" options={VISOES} value={visao} onChange={(v) => v && setVisao(v)} />
+      <div className="no-print flex flex-col gap-4 rounded-lg border border-line bg-surface p-4">
+        <Chips label="Relatório" options={visoes} value={visao} onChange={(v) => v && setVisao(v)} />
         <Chips label="Período" options={PERIODOS} value={periodo} onChange={(v) => v && setPeriodo(v)} />
         <div className="flex flex-wrap gap-4">
           {periodo === 'custom' && (
@@ -115,7 +118,8 @@ export default function Relatorios() {
         </div>
       </div>
 
-      {visao !== 'geral' ? <RelatoriosExtra visao={visao} ini={ini} fim={fim} loja={loja} isAdmin={isAdmin} /> : <>
+      {visao === 'notas' ? <NotasEmitidas ini={ini} fim={fim} loja={loja} isAdmin={isAdmin} rotuloLoja={isAdmin ? (loja ? nomeLoja(lojas.find((l) => l.id === loja)?.nome) : 'Todas as lojas') : nomeLoja(perfil.loja?.nome)} />
+      : visao !== 'geral' ? <RelatoriosExtra visao={visao} ini={ini} fim={fim} loja={loja} isAdmin={isAdmin} /> : <>
       {erro && <Alert>{erro}</Alert>}
       {r === null ? <Spinner label="Calculando relatórios" /> : !res ? null : res.vendas === 0 && !(r.os_atrasadas?.length) ? (
         <Empty title="Nenhuma venda confirmada nesse período">Escolha outro período para ver os números.</Empty>

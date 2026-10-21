@@ -26,6 +26,8 @@
   @page { size: A4; margin: 0; }
   html, body { background: #FAFAFA !important; }
   .no-print { display: none !important; }
+  .relatorio-impressao { padding: 10mm 12mm; }
+  .relatorio-impressao tr { break-inside: avoid; }
   .folha-os { break-after: page; page-break-after: always; }
   .folha-os:last-child { break-after: auto; page-break-after: auto; }
 }

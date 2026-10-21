@@ -23,9 +23,9 @@ export default function Layout({ children }) {
   const lojaCurta = perfil.loja?.nome?.replace('Óticas Idealize ', '')
 
   return (
-    <div className="min-h-screen md:grid md:grid-cols-[248px_1fr]">
+    <div className="min-h-screen md:grid md:grid-cols-[248px_1fr] print:block">
       {/* Desktop */}
-      <aside className="sticky top-0 hidden h-screen flex-col justify-between border-r border-line bg-surface md:flex">
+      <aside className="no-print sticky top-0 hidden h-screen flex-col justify-between border-r border-line bg-surface md:flex">
         <div className="flex flex-col gap-8 p-4">
           <div className="px-2 pt-2"><Logo className="w-44" /></div>
           <nav className="flex flex-col gap-1">
@@ -65,7 +65,7 @@ export default function Layout({ children }) {
       </aside>
 
       {/* Mobile */}
-      <header className="sticky top-0 z-30 flex items-center justify-between border-b border-line bg-surface px-4 py-3 md:hidden" style={{ paddingTop: 'max(12px, env(safe-area-inset-top))' }}>
+      <header className="no-print sticky top-0 z-30 flex items-center justify-between border-b border-line bg-surface px-4 py-3 md:hidden" style={{ paddingTop: 'max(12px, env(safe-area-inset-top))' }}>
         <Logo className="w-32" />
         <div className="flex items-center gap-2">
           <span className="text-xs font-semibold text-muted">{lojaCurta}</span>
@@ -73,12 +73,12 @@ export default function Layout({ children }) {
         </div>
       </header>
 
-      <main className="min-w-0 px-4 pb-24 pt-6 sm:px-8 md:pb-12">{children}</main>
+      <main className="min-w-0 px-4 pb-24 pt-6 sm:px-8 md:pb-12 print:p-0">{children}</main>
 
       {/* gerente: pedidos de desconto acima do limite chegam aqui, em qualquer página */}
       {perm.nivel >= 2 && <PedidosDesconto />}
 
-      <nav className="fixed inset-x-0 bottom-0 z-30 flex border-t border-line bg-surface md:hidden" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
+      <nav className="no-print fixed inset-x-0 bottom-0 z-30 flex border-t border-line bg-surface md:hidden" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
         {links.map((l) => (
           <NavLink key={l.to} to={l.to} end={l.end}
             className={({ isActive }) => cx('flex flex-1 flex-col items-center gap-1 border-t-2 py-2 text-xs font-semibold', isActive ? 'border-accent text-brand' : 'border-transparent text-muted')}>

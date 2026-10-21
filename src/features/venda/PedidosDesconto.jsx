@@ -48,7 +48,7 @@ export default function PedidosDesconto() {
   if (!pedidos.length) return null
   return (
     <section aria-label="Pedidos de desconto" aria-live="polite"
-      className="fixed inset-x-4 bottom-20 z-40 flex flex-col gap-2 sm:left-auto sm:right-6 sm:w-96 md:bottom-6">
+      className="no-print fixed inset-x-4 bottom-20 z-40 flex flex-col gap-2 sm:left-auto sm:right-6 sm:w-96 md:bottom-6">
       {pedidos.map((p) => (
         <div key={p.id} className="flex flex-col gap-3 rounded-lg border border-line bg-surface p-4 shadow-xl">
           <div className="flex items-start gap-3">
