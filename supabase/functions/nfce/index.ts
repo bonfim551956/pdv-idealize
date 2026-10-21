@@ -67,9 +67,9 @@ Deno.serve(async (req) => {
   }
 
   try {
-    // ---------- Configurar a loja (diretor / supervisão) ----------
+    // ---------- Configurar a loja (só proprietário) ----------
     if (b.acao === 'configurar') {
-      if (!['supervisao', 'diretor'].includes(eu.cargo)) return erro('Só supervisão ou diretoria configura a nota fiscal.', 403)
+      if (eu.cargo !== 'diretor') return erro('Só o proprietário configura a nota fiscal.', 403)
       const patch: Record<string, unknown> = { atualizado_em: new Date().toISOString() }
       for (const k of ['inscricao_estadual', 'regime', 'csosn', 'pis_cst', 'cofins_cst', 'ambiente']) if (b[k] !== undefined && b[k] !== '') patch[k] = b[k]
       if (b.token_homologacao) patch.token_homologacao = String(b.token_homologacao).trim()

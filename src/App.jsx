@@ -56,7 +56,7 @@ export default function App() {
               <Route path="/relatorios" element={<Relatorios />} />
               <Route path="/fechamento" element={<Fechamento />} />
               <Route path="/produtos" element={perm.produtos ? <Produtos /> : <Navigate to="/" />} />
-              <Route path="/nota-fiscal" element={perm.produtos ? <NotaFiscal /> : <Navigate to="/" />} />
+              <Route path="/nota-fiscal" element={perm.fiscalConfig ? <NotaFiscal /> : <Navigate to="/" />} />
               <Route path="/usuarios" element={perm.usuarios ? <Usuarios /> : <Navigate to="/" />} />
               <Route path="*" element={<Navigate to="/" />} />
             </Routes>

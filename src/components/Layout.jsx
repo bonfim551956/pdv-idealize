@@ -17,7 +17,7 @@ export default function Layout({ children }) {
     { to: '/fechamento', label: 'Fechamento de caixa', icon: Wallet },
     { to: '/relatorios', label: 'Relatórios', icon: BarChart3 },
     ...(perm.produtos ? [{ to: '/produtos', label: 'Lentes e preços', icon: Glasses }] : []),
-    ...(perm.produtos ? [{ to: '/nota-fiscal', label: 'Nota fiscal', icon: FileText }] : []),
+    ...(perm.fiscalConfig ? [{ to: '/nota-fiscal', label: 'Nota fiscal', icon: FileText }] : []),
     ...(perm.usuarios ? [{ to: '/usuarios', label: 'Usuários', icon: Users }] : []),
   ]
   const lojaCurta = perfil.loja?.nome?.replace('Óticas Idealize ', '')

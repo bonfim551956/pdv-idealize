@@ -54,9 +54,9 @@ function Colunas({ dias }) {
 }
 
 export default function Relatorios() {
-  const { isAdmin, perfil, perm } = useAuth()
-  // Notas fiscais emitidas: Administrativo (loja dele), Supervisão e Diretor
-  const visoes = perm.nivel >= 2 ? [...VISOES, { value: 'notas', label: 'Notas fiscais' }] : VISOES
+  const { isAdmin, perfil } = useAuth()
+  // Notas fiscais emitidas: todos os perfis (Comercial e Administrativo veem a própria loja)
+  const visoes = [...VISOES, { value: 'notas', label: 'Notas fiscais' }]
   const [periodo, setPeriodo] = useState('mes')
   const [de, setDe] = useState(isoLocal(new Date(new Date().getFullYear(), new Date().getMonth(), 1)))
   const [ate, setAte] = useState(isoLocal(new Date()))
@@ -118,7 +118,7 @@ export default function Relatorios() {
         </div>
       </div>
 
-      {visao === 'notas' ? <NotasEmitidas ini={ini} fim={fim} loja={loja} isAdmin={isAdmin} rotuloLoja={isAdmin ? (loja ? nomeLoja(lojas.find((l) => l.id === loja)?.nome) : 'Todas as lojas') : nomeLoja(perfil.loja?.nome)} />
+      {visao === 'notas' ? <NotasEmitidas ini={ini} fim={fim} loja={loja} lojaZip={isAdmin ? loja : perfil.loja_id} isAdmin={isAdmin} rotuloLoja={isAdmin ? (loja ? nomeLoja(lojas.find((l) => l.id === loja)?.nome) : 'Todas as lojas') : nomeLoja(perfil.loja?.nome)} />
       : visao !== 'geral' ? <RelatoriosExtra visao={visao} ini={ini} fim={fim} loja={loja} isAdmin={isAdmin} /> : <>
       {erro && <Alert>{erro}</Alert>}
       {r === null ? <Spinner label="Calculando relatórios" /> : !res ? null : res.vendas === 0 && !(r.os_atrasadas?.length) ? (

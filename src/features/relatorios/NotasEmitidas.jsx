@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Printer, FileSpreadsheet } from 'lucide-react'
+import { Printer, FileSpreadsheet, FolderDown, FileDown } from 'lucide-react'
+import { nfce } from '../../lib/nfce'
 import { supabase, buscarTodos, mensagemErro } from '../../lib/supabase'
 import { brl, dataHoraBR, dataBR } from '../../lib/format'
 import { Button, Chips, Spinner, Alert, Empty, Section, cx } from '../../components/ui'
@@ -29,7 +30,49 @@ const docTxt = (d) => {
   return s || '—'
 }
 
-export default function NotasEmitidas({ ini, fim, loja, isAdmin, rotuloLoja }) {
+/* ZIP mensal oficial da Focus (XMLs e DANFEs) para mandar à contabilidade */
+const mesTxt = (m) => `${String(m).slice(4, 6)}/${String(m).slice(0, 4)}`
+function ArquivosContabilidade({ lojaId }) {
+  const [backups, setBackups] = useState(null)
+  const [erro, setErro] = useState(null)
+  const [buscando, setBuscando] = useState(false)
+  useEffect(() => { setBackups(null); setErro(null) }, [lojaId])
+  const buscar = async () => {
+    setBuscando(true); setErro(null); setBackups(null)
+    try { setBackups(await nfce({ acao: 'backups', loja_id: lojaId })) } catch (e) { setErro(e.message) }
+    setBuscando(false)
+  }
+  const link = 'inline-flex items-center gap-1 rounded-md border border-line px-2 py-1 text-xs font-semibold hover:border-brand hover:text-brand'
+  return (
+    <Section title="Arquivos para a contabilidade" className="no-print">
+      <div className="flex flex-col gap-3">
+        <div className="flex flex-wrap items-center gap-3">
+          <Button variant="secondary" icon={FolderDown} loading={buscando} disabled={!lojaId} onClick={buscar}>Ver XMLs por mês (ZIP)</Button>
+          {!lojaId && <span className="text-sm text-muted">Escolha uma loja no filtro acima para baixar os XMLs.</span>}
+        </div>
+        {erro && <Alert>{erro}</Alert>}
+        {backups && (backups.meses.length === 0 ? (
+          <p className="text-sm text-muted">Ainda não há backup mensal para esta loja{backups.ambiente === 'homologacao' ? ' (só há token de teste; os backups saem das notas de produção)' : ''}. A Focus gera o arquivo do mês depois que ele fecha.</p>
+        ) : (
+          <ul className="flex flex-col divide-y divide-line rounded-md border border-line">
+            {backups.meses.map((b) => (
+              <li key={b.mes} className="flex flex-wrap items-center justify-between gap-3 px-4 py-2 text-sm">
+                <span className="num font-semibold">{mesTxt(b.mes)}</span>
+                <span className="flex gap-2">
+                  {b.xmls && <a href={b.xmls} target="_blank" rel="noreferrer" className={link}><FileDown className="h-3.5 w-3.5" />XMLs (ZIP)</a>}
+                  {b.danfes && <a href={b.danfes} target="_blank" rel="noreferrer" className={link}><FileDown className="h-3.5 w-3.5" />DANFEs NF-e (ZIP)</a>}
+                </span>
+              </li>
+            ))}
+          </ul>
+        ))}
+        <p className="text-xs text-muted">Mande à contabilidade o ZIP de XMLs de cada mês (é o arquivo que eles importam) e, se quiserem conferir, a planilha das notas.</p>
+      </div>
+    </Section>
+  )
+}
+
+export default function NotasEmitidas({ ini, fim, loja, lojaZip, isAdmin, rotuloLoja }) {
   const [modelo, setModelo] = useState('todos')
   const [situacao, setSituacao] = useState('todas')
   const [teste, setTeste] = useState(false)
@@ -173,6 +216,7 @@ export default function NotasEmitidas({ ini, fim, loja, isAdmin, rotuloLoja }) {
           </Section>
         </>
       )}
+      <ArquivosContabilidade lojaId={lojaZip} />
     </div>
   )
 }

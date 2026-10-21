@@ -17,6 +17,7 @@ export function permissoes(cargo) {
     todasLojas: nivel >= 3, // administrativo fica na própria loja
     usuarios: nivel >= 2,
     produtos: nivel >= 3,
+    fiscalConfig: nivel >= 4, // cadastro fiscal da loja (Focus NFe): só proprietário
   }
 }
 
