@@ -52,7 +52,7 @@ function Indicador({ rotulo, valor, destaque }) {
 
 export default function Vendas() {
   const nav = useNavigate()
-  const { isAdmin } = useAuth()
+  const { isAdmin, perfil } = useAuth()
   const [vendas, setVendas] = useState(null)
   const [erro, setErro] = useState(null)
   const [busca, setBusca] = useState('')
@@ -67,7 +67,8 @@ export default function Vendas() {
   const [lojas, setLojas] = useState([])
 
   useEffect(() => {
-    supabase.from('colaboradores').select('id, nome, loja_id').eq('ativo', true).order('nome').then(({ data }) => setConsultores(data || []))
+    // inclui desligados: as vendas deles continuam no sistema e podem ser filtradas
+    supabase.from('colaboradores').select('id, nome, loja_id, ativo').order('ativo', { ascending: false }).order('nome').then(({ data }) => setConsultores(data || []))
     if (isAdmin) supabase.from('lojas').select('id, nome').eq('ativo', true).order('nome').then(({ data }) => setLojas(data || []))
   }, [isAdmin])
 
@@ -114,7 +115,8 @@ export default function Vendas() {
     return { qtd: validas.length, total, recebido, aReceber: total - recebido, ticket: validas.length ? total / validas.length : 0 }
   }, [vendas])
 
-  const consultoresVisiveis = loja ? consultores.filter((c) => c.loja_id === loja) : consultores
+  const lojaFiltro = isAdmin ? loja : perfil?.loja_id
+  const consultoresVisiveis = lojaFiltro ? consultores.filter((c) => c.loja_id === lojaFiltro) : consultores
   const filtrosAtivos = busca || situacao || statusOS || consultor || loja
 
   const exportarCSV = () => {
@@ -163,7 +165,7 @@ export default function Vendas() {
           )}
           <Select aria-label="Consultor" value={consultor} onChange={(e) => setConsultor(e.target.value)}>
             <option value="">Todos os consultores</option>
-            {consultoresVisiveis.map((c) => <option key={c.id} value={c.id}>{c.nome}</option>)}
+            {consultoresVisiveis.map((c) => <option key={c.id} value={c.id}>{c.nome}{c.ativo ? '' : ' (desligado)'}</option>)}
           </Select>
           <Select aria-label="Situação da OS" value={statusOS} onChange={(e) => setStatusOS(e.target.value)}>
             <option value="">Todas as situações de OS</option>
